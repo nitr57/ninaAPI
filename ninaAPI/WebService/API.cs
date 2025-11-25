@@ -101,7 +101,6 @@ namespace ninaAPI.WebService
                 {
                     serverThread = new Thread(() => APITask(Server));
                     serverThread.Name = "API Thread";
-                    serverThread.SetApartmentState(ApartmentState.STA);
                     serverThread.Start();
                 }
             }
@@ -126,7 +125,6 @@ namespace ninaAPI.WebService
             }
         }
 
-        [STAThread]
         private void APITask(WebServer server)
         {
             string ipAdress = CoreUtility.GetLocalNames()["IPADRESS"];

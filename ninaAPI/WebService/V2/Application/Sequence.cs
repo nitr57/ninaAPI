@@ -587,14 +587,6 @@ namespace ninaAPI.WebService.V2
                     {
                         it.Add("Text", i21.Text);
                     }
-                    else if (item is NINA.Sequencer.SequenceItem.Utility.MessageBox i22)
-                    {
-                        it.Add("Text", i22.Text);
-                    }
-                    else if (item is ExternalScript i23)
-                    {
-                        it.Add("Script", i23.Script);
-                    }
                     else if (item is SaveSequence i24)
                     {
                         it.Add("FilePath", i24.FilePath);

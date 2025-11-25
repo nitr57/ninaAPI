@@ -9,7 +9,6 @@
 
 #endregion "copyright"
 
-using Accord.IO;
 using EmbedIO;
 using EmbedIO.Routing;
 using EmbedIO.WebSockets;
@@ -109,7 +108,9 @@ namespace ninaAPI.WebService.V2
 
             response.Response = responseData;
 
-            Hashtable eventTable = responseData.DeepClone();
+            // Deep clone using JSON serialization (BinaryFormatter is disabled in .NET 8)
+            string json = JsonConvert.SerializeObject(responseData);
+            Hashtable eventTable = JsonConvert.DeserializeObject<Hashtable>(json);
             eventTable.Add("Time", time);
             HttpResponse Event = new HttpResponse() { Type = HttpResponse.TypeSocket, Response = eventTable };
             Events.Add(Event);
