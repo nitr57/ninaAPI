@@ -50,5 +50,13 @@ namespace ninaAPI.WebService.V2
         {
             HttpContext.WriteToResponse(new HttpResponse() { Response = friendly ? NINA.Core.Utility.CoreUtil.VersionFriendlyName : NINA.Core.Utility.CoreUtil.Version });
         }
+
+#if !WINDOWS
+        [Route(HttpVerbs.Get, "/version/pins")]
+        public void GetPINSVersion([QueryField] bool friendly)
+        {
+            HttpContext.WriteToResponse(new HttpResponse() { Response = friendly ? NINA.Core.Utility.CoreUtil.VersionFriendlyName : NINA.Core.Utility.CoreUtil.Version });
+        }
+#endif
     }
 }
