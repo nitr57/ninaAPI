@@ -129,6 +129,92 @@ namespace ninaAPI.WebService.V2
 
             HttpContext.WriteToResponse(response);
         }
+#if !WINDOWS
+        [Route(HttpVerbs.Get, "/equipment/focuser/maxstep")]
+        public void FocuserMaxStep([QueryField] int position)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (!CoreUtil.IsLinux())
+                {
+                    var platform = CoreUtil.UserAgent;
+                    response = CoreUtility.CreateErrorTable(new Error($"MaxStep endpoint only available on Linux ({platform})", 403));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+
+                IFocuserMediator focuser = AdvancedAPI.Controls.Focuser;
+                if (!focuser.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Focuser not connected", 409));
+                }
+                else
+                {
+                    if (!focuser.GetInfo().CanSetMaxStep)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Focuser cannot set max step", 409));
+                    }
+                    else
+                    {
+                        focuser.SetMaxStep(position);
+                        response.Response = "Focuser max step set";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/focuser/reverse")]
+        public void FocuserReverse([QueryField] bool value)
+        {
+            HttpResponse response = new();
+
+            try
+            {
+                if (!CoreUtil.IsLinux())
+                {
+                    var platform = CoreUtil.UserAgent;
+                    response = CoreUtility.CreateErrorTable(new Error($"Reverse endpoint only available on Linux ({platform})", 403));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+
+                IFocuserMediator focuser = AdvancedAPI.Controls.Focuser;
+
+                if (!focuser.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Focuser not connected", 409));
+                }
+                else
+                {
+                    if (!focuser.GetInfo().CanReverse)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Focuser cannot set reverse", 409));
+                    }
+                    else
+                    {
+                        focuser.SetReverse(value);
+                        response.Response = "Focuser reverse set";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+#endif
 
         // Only works if it was started by the api
         [Route(HttpVerbs.Get, "/equipment/focuser/auto-focus")]

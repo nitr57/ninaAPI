@@ -14,6 +14,7 @@ using EmbedIO.Routing;
 using EmbedIO.WebApi;
 using NINA.Core.Utility;
 using NINA.Equipment.Equipment.MyRotator;
+using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
 using ninaAPI.Utility;
 using System;
@@ -159,5 +160,50 @@ namespace ninaAPI.WebService.V2
 
             HttpContext.WriteToResponse(response);
         }
+
+#if !WINDOWS
+        [Route(HttpVerbs.Get, "/equipment/rotator/reverse")]
+        public void RotatorReverse([QueryField] bool value)
+        {
+            HttpResponse response = new();
+
+            try
+            {
+                if (!CoreUtil.IsLinux())
+                {
+                    var platform = CoreUtil.UserAgent;
+                    response = CoreUtility.CreateErrorTable(new Error($"Reverse endpoint only available on Linux ({platform})", 403));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+
+                IRotatorMediator rotator = AdvancedAPI.Controls.Rotator;
+
+                if (!rotator.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Rotator not connected", 409));
+                }
+                else
+                {
+                    if (!rotator.GetInfo().CanReverse)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Rotator cannot set reverse", 409));
+                    }
+                    else
+                    {
+                        rotator.SetReverse(value);
+                        response.Response = "Rotator reverse set";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+#endif
     }
 }
