@@ -32,6 +32,9 @@ using NINA.Profile;
 using NINA.WPF.Base.Model;
 using System.Diagnostics;
 using NINA.Equipment.Interfaces.Mediator;
+using NINA.PlateSolving;
+using NINA.Equipment.Interfaces.ViewModel;
+using NINA.Astrometry;
 
 namespace ninaAPI.WebService.V2
 {
@@ -109,11 +112,33 @@ namespace ninaAPI.WebService.V2
         public ImageResponse ImageStatistics { get; set; } = stats;
     }
 
+    public class PlateSolveResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string Error { get; set; }
+        public double? RA { get; set; }
+        public double? Dec { get; set; }
+        public string RAString { get; set; }
+        public string DecString { get; set; }
+        public double? Orientation { get; set; }
+        public double? PixelScale { get; set; }
+        public double? Radius { get; set; }
+    }
+
+    public class PlateSolveState
+    {
+        public bool IsSolving { get; set; }
+        public dynamic CurrentResult { get; set; }
+        public DateTime LastSolveTime { get; set; }
+    }
+
     public class ImageWatcher : INinaWatcher
     {
         public static List<ImageResponse> Images = new List<ImageResponse>();
         public static List<KeyValuePair<int, string>> Thumbnails = new List<KeyValuePair<int, string>>();
         public static IRenderedImage PreparedImage { get; private set; }
+        public static PlateSolveState PlateSolveState { get; private set; } = new PlateSolveState();
 
         public static object imageLock = new object();
 
@@ -318,6 +343,223 @@ namespace ninaAPI.WebService.V2
             {
                 Logger.Error(ex);
                 response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/platesolve")]
+        public void PlateSolveCurrentImage()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                // Get the current prepared image
+                IRenderedImage renderedImage = null;
+                lock (ImageWatcher.imageLock)
+                {
+                    renderedImage = ImageWatcher.PreparedImage;
+                }
+
+                if (renderedImage == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("No image available to plate solve", 404));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+
+                // Check if already solving
+                if (ImageWatcher.PlateSolveState.IsSolving)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Plate solve already in progress", 400));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+
+                // Perform plate solve synchronously
+                var psResult = PerformPlateSolveSync(renderedImage);
+
+                // Return result directly
+                response.Response = psResult;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Error during plate solve", ex);
+                response = CoreUtility.CreateErrorTable(new Error(ex.Message, 500));
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        private static PlateSolveResponse PerformPlateSolveSync(IRenderedImage renderedImage)
+        {
+            try
+            {
+                ImageWatcher.PlateSolveState.IsSolving = true;
+                
+                var plateSolver = AdvancedAPI.Controls.PlateSolver.GetPlateSolver(AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings);
+                var blindSolver = AdvancedAPI.Controls.PlateSolver.GetBlindSolver(AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings);
+                
+                var parameter = new PlateSolveParameter()
+                {
+                    Binning = AdvancedAPI.Controls.Camera.GetInfo()?.BinX ?? 1,
+                    Coordinates = AdvancedAPI.Controls.Mount.GetCurrentPosition(),
+                    DownSampleFactor = AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings.DownSampleFactor,
+                    FocalLength = AdvancedAPI.Controls.Profile.ActiveProfile.TelescopeSettings.FocalLength,
+                    MaxObjects = AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings.MaxObjects,
+                    PixelSize = AdvancedAPI.Controls.Profile.ActiveProfile.CameraSettings.PixelSize,
+                    Regions = AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings.Regions,
+                    SearchRadius = AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings.SearchRadius,
+                    BlindFailoverEnabled = AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings.BlindFailoverEnabled
+                };
+
+                var imageSolver = new ImageSolver(plateSolver, blindSolver);
+                using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
+                {
+                    var result = imageSolver.Solve(renderedImage.RawImageData, parameter, null, cts.Token).GetAwaiter().GetResult();
+                    
+                    if (result.Success && AdvancedAPI.Controls.Mount.GetInfo().Connected)
+                    {
+                        var scopePosition = AdvancedAPI.Controls.Mount.GetCurrentPosition();
+                        var resultCoordinates = result.Coordinates.Transform(scopePosition.Epoch);
+                        result.Separation = scopePosition - resultCoordinates;
+                    }
+
+                    lock (ImageWatcher.imageLock)
+                    {
+                        ImageWatcher.PlateSolveState.CurrentResult = result;
+                        ImageWatcher.PlateSolveState.LastSolveTime = DateTime.Now;
+                    }
+
+                    // Format and return result
+                    return FormatPlateSolveResult(result);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Logger.Warning("Plate solve timed out after 60 seconds");
+                return new PlateSolveResponse 
+                { 
+                    Success = false, 
+                    Message = "Plate solve timed out after 60 seconds",
+                    Error = "Timeout"
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Error during plate solve", ex);
+                return new PlateSolveResponse 
+                { 
+                    Success = false, 
+                    Message = "Plate solve failed: " + ex.Message,
+                    Error = ex.Message
+                };
+            }
+            finally
+            {
+                ImageWatcher.PlateSolveState.IsSolving = false;
+            }
+        }
+
+        private static PlateSolveResponse FormatPlateSolveResult(dynamic psResult)
+        {
+            try
+            {
+                // Extract values from the PlateSolveResult object using reflection
+                var resultType = psResult.GetType();
+                var successProp = resultType.GetProperty("Success");
+                var coordinatesProp = resultType.GetProperty("Coordinates");
+                var positionAngleProp = resultType.GetProperty("PositionAngle");
+                var pixelScaleProp = resultType.GetProperty("PixelScale");
+                var radiusProp = resultType.GetProperty("Radius");
+
+                var success = (bool?)(successProp?.GetValue(psResult)) ?? false;
+                var coordinates = coordinatesProp?.GetValue(psResult);
+                var positionAngle = (double?)(positionAngleProp?.GetValue(psResult));
+                var pixelScale = (double?)(pixelScaleProp?.GetValue(psResult));
+                var radius = (double?)(radiusProp?.GetValue(psResult));
+
+                double? ra = null;
+                double? dec = null;
+                string raString = null;
+                string decString = null;
+                
+                if (coordinates != null)
+                {
+                    var coordType = coordinates.GetType();
+                    var raDegreesProperty = coordType.GetProperty("RADegrees");
+                    var decProperty = coordType.GetProperty("Dec");
+                    
+                    ra = (double?)(raDegreesProperty?.GetValue(coordinates));
+                    dec = (double?)(decProperty?.GetValue(coordinates));
+                    
+                    // Convert RA from degrees to hours and format as string
+                    if (ra.HasValue)
+                    {
+                        var raHours = ra.Value / 15.0; // Convert degrees to hours (360 degrees = 24 hours)
+                        var hours = (int)raHours;
+                        var minutes = (int)((raHours - hours) * 60);
+                        var seconds = ((raHours - hours) * 60 - minutes) * 60;
+                        raString = $"{hours:D2}h{minutes:D2}m{seconds:F2}s";
+                    }
+                    
+                    // Format Dec as string
+                    if (dec.HasValue)
+                    {
+                        var decAbs = Math.Abs(dec.Value);
+                        var decDegrees = (int)decAbs;
+                        var decMinutes = (int)((decAbs - decDegrees) * 60);
+                        var decSeconds = ((decAbs - decDegrees) * 60 - decMinutes) * 60;
+                        var sign = dec.Value < 0 ? "-" : "+";
+                        decString = $"{sign}{decDegrees:D2}°{decMinutes:D2}'{decSeconds:F2}\"";
+                    }
+                }
+
+                return new PlateSolveResponse
+                {
+                    Success = success,
+                    Message = success ? "Plate solve successful" : "Plate solve failed",
+                    RA = ra,
+                    Dec = dec,
+                    RAString = raString,
+                    DecString = decString,
+                    Orientation = positionAngle,
+                    PixelScale = pixelScale,
+                    Radius = radius
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Error formatting plate solve result", ex);
+                return new PlateSolveResponse 
+                { 
+                    Success = false, 
+                    Message = "Error formatting result: " + ex.Message 
+                };
+            }
+        }
+
+        [Route(HttpVerbs.Get, "/platesolve/cancel")]
+        public void CancelPlateSolve()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                lock (ImageWatcher.imageLock)
+                {
+                    ImageWatcher.PlateSolveState.IsSolving = false;
+                }
+
+                response.Response = new PlateSolveResponse
+                {
+                    Success = true,
+                    Message = "Plate solve cancelled"
+                };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Error cancelling plate solve", ex);
+                response = CoreUtility.CreateErrorTable(new Error(ex.Message, 500));
             }
 
             HttpContext.WriteToResponse(response);
