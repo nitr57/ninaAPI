@@ -39,6 +39,8 @@
     <PackageReference Include="Microsoft.DotNet.UpgradeAssistant.Extensions.Default.Analyzers" Version="0.4.346202">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Exclude System.Drawing.Common as it conflicts with our compat library -->
+    <PackageReference Include="System.Drawing.Common" Version="*" ExcludeAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="EmbedIO" Version="3.5.2" />
