@@ -43,6 +43,9 @@ namespace ninaAPI.WebService
 
         public void CreateServer()
         {
+            // Suppress EmbedIO verbose logging by unregistering the logger
+            Swan.Logging.Logger.UnregisterLogger<Swan.Logging.ConsoleLogger>();
+            
             Server = new WebServer(o => o
                 .WithUrlPrefix($"http://*:{Port}")
                 .WithMode(HttpListenerMode.EmbedIO))
