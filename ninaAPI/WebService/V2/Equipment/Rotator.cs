@@ -14,7 +14,6 @@ using EmbedIO.Routing;
 using EmbedIO.WebApi;
 using NINA.Core.Utility;
 using NINA.Equipment.Equipment.MyRotator;
-using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
 using ninaAPI.Utility;
 using System;
@@ -120,10 +119,13 @@ namespace ninaAPI.WebService.V2
                 {
                     response = CoreUtility.CreateErrorTable(new Error("Rotator not connected", 409));
                 }
-                RotatorToken?.Cancel();
-                RotatorToken = new CancellationTokenSource();
-                rotator.Move(position, RotatorToken.Token);
-                response.Response = "Rotator move started";
+                else
+                {
+                    RotatorToken?.Cancel();
+                    RotatorToken = new CancellationTokenSource();
+                    rotator.Move(position, RotatorToken.Token);
+                    response.Response = "Rotator move started";
+                }
             }
             catch (Exception ex)
             {
@@ -147,10 +149,13 @@ namespace ninaAPI.WebService.V2
                 {
                     response = CoreUtility.CreateErrorTable(new Error("Rotator not connected", 409));
                 }
-                RotatorToken?.Cancel();
-                RotatorToken = new CancellationTokenSource();
-                rotator.MoveMechanical(position, RotatorToken.Token);
-                response.Response = "Rotator move started";
+                else
+                {
+                    RotatorToken?.Cancel();
+                    RotatorToken = new CancellationTokenSource();
+                    rotator.MoveMechanical(position, RotatorToken.Token);
+                    response.Response = "Rotator move started";
+                }
             }
             catch (Exception ex)
             {

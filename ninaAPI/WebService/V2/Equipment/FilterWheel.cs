@@ -206,7 +206,6 @@ namespace ninaAPI.WebService.V2
         public void FilterWheelAddFilter()
         {
             HttpResponse response = new HttpResponse();
-
             try
             {
                 IFilterWheelSettings settings = AdvancedAPI.Controls.Profile.ActiveProfile.FilterWheelSettings;
@@ -228,7 +227,6 @@ namespace ninaAPI.WebService.V2
         public void FilterWheelRemoveFilter([QueryField] int filterId)
         {
             HttpResponse response = new HttpResponse();
-
             try
             {
                 var settings = AdvancedAPI.Controls.Profile.ActiveProfile.FilterWheelSettings;
