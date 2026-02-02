@@ -1,7 +1,7 @@
 # ninaAPI
 
 API for the astronomy imaging software N.I.N.A.
-The documentation for the api can be found [here](https://bump.sh/christian-photo/doc/advanced-api), and the documentation for the websockets is available [here](https://bump.sh/christian-photo/doc/advanced-api-websockets).
+The documentation for the api can be found [here](https://christian-photo.github.io/github-page/projects/ninaAPI/v2/doc/api), and the documentation for the websockets is available [here](https://github.com/christian-photo/ninaAPI/wiki/Websocket-V2).
 
 This plugin aims to be an all-around api for building your own custom tools and apps! Let me know about any cool projects you make, at the bottom of the readme you can find a list containing cool projects using the api!
 
@@ -25,3 +25,4 @@ Take a look at these projects:
 - [Touch'N'Stars: WebApp for Mobile Control of NINA](https://github.com/Touch-N-Stars/Touch-N-Stars)
 - [N.I.N.A Model Context Protocol Server for Advanced API Plugin v2 (MCP)](https://github.com/PaDev1/Nina_advanced_api_mcp)
 - [Mobile interface to Manage NINA using the Advanced API plugin](https://github.com/venturachrisdev/Cygnus-Astro)
+- [Your Personal Astrophotography Catalog - CosmosCollection](https://github.com/quake101/CosmosCollection)

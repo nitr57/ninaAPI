@@ -2,6 +2,16 @@
 
 The changes for each individual (beta) release can be seen in each [release](https://github.com/christian-photo/ninaAPI/releases). This changelog will only cover the fully released versions.
 
+## 2.2.14.3
+
+- Add rotator stop move api endpoint
+- Add focuser stop move api endpoint
+- Bugfix for networked rotator
+
+## 2.2.14.2
+
+- Add option to skip autostretch when using the capture endpoint
+
 ## 2.2.14.1
 
 - Fix moon separation calculation
