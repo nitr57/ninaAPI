@@ -30,6 +30,7 @@ using NINA.Plugin.Interfaces;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
 using NINA.Sequencer.Interfaces.Mediator;
+using NINA.Sequencer.Logic;
 using NINA.WPF.Base.Interfaces;
 using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.Interfaces.ViewModel;
@@ -81,7 +82,8 @@ namespace ninaAPI
                            IDomeFollower domeFollower,
                            ITwilightCalculator twilightCalculator,
                            INighttimeCalculator nighttimeCalculator,
-                           IWindowServiceFactory windowFactory)
+                           IWindowServiceFactory windowFactory,
+                           ISymbolBroker symbolBroker)
         {
 #if WINDOWS
             Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary() { Source = new Uri("pack://application:,,,/ninaAPI;component/WebService/V2/CustomDrivers/RotatorDataTemplate.xaml") });
@@ -89,8 +91,7 @@ namespace ninaAPI
             PluginId = this.Identifier;
             instance = this;
 
-            Controls = new NINAControls()
-            {
+            Controls = new NINAControls() {
                 Camera = camera,
                 Mount = telescope,
                 Focuser = focuser,
@@ -118,6 +119,7 @@ namespace ninaAPI
                 TwilightCalculator = twilightCalculator,
                 NighttimeCalculator = nighttimeCalculator,
                 WindowFactory = windowFactory,
+                SymbolBroker = symbolBroker,
             };
 
             if (Settings.Default.UpdateSettings)

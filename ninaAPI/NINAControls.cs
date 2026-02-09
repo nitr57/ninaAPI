@@ -18,6 +18,7 @@ using NINA.PlateSolving.Interfaces;
 using NINA.Plugin.Interfaces;
 using NINA.Profile.Interfaces;
 using NINA.Sequencer.Interfaces.Mediator;
+using NINA.Sequencer.Logic;
 using NINA.WPF.Base.Interfaces;
 using NINA.WPF.Base.Interfaces.Mediator;
 using NINA.WPF.Base.Interfaces.ViewModel;
@@ -60,6 +61,7 @@ namespace ninaAPI
         public ITwilightCalculator TwilightCalculator;
         public INighttimeCalculator NighttimeCalculator;
         public IWindowServiceFactory WindowFactory;
+        public ISymbolBroker SymbolBroker;
         #endregion
     }
 }
