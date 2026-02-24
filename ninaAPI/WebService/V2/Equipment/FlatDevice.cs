@@ -178,5 +178,593 @@ namespace ninaAPI.WebService.V2
 
             HttpContext.WriteToResponse(response);
         }
+
+        [Route(HttpVerbs.Get, "/equipment/flatdevice/set-heater")]
+        public void FlatDeviceSetHeater([QueryField] int power)
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                if (!AdvancedAPI.Controls.FlatDevice.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("FlatDevice not connected", 409));
+                }
+                else
+                {
+                    var mediator = AdvancedAPI.Controls.FlatDevice;
+                    var mediatorType = mediator.GetType();
+
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active flat device available", 500));
+                    }
+                    else
+                    {
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("Wanderer"))
+                        {
+                            var heaterProperty = deviceType.GetProperty("HeaterPower",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (heaterProperty != null)
+                            {
+                                var setMethod = heaterProperty.GetSetMethod(true);
+                                if (setMethod != null)
+                                {
+                                    setMethod.Invoke(device, new object[] { power });
+                                    response.Response = "Heater set";
+                                }
+                                else
+                                {
+                                    response = CoreUtility.CreateErrorTable(new Error("Heater property has no setter", 501));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererCover does not have Heater property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Heater control is only supported on WandererCover. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/flatdevice/get-heater")]
+        public void FlatDeviceGetHeater()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                if (!AdvancedAPI.Controls.FlatDevice.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("FlatDevice not connected", 409));
+                }
+                else
+                {
+                    var mediator = AdvancedAPI.Controls.FlatDevice;
+                    var mediatorType = mediator.GetType();
+
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active flat device available", 500));
+                    }
+                    else
+                    {
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("Wanderer"))
+                        {
+                            var heaterProperty = deviceType.GetProperty("HeaterPower",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (heaterProperty != null)
+                            {
+                                try
+                                {
+                                    var heaterValue = heaterProperty.GetValue(device);
+                                    response.Response = heaterValue;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"Failed to get Heater value: {ex.Message}");
+                                    response = CoreUtility.CreateErrorTable(new Error($"Failed to get heater: {ex.InnerException?.Message ?? ex.Message}", 500));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererCover does not have Heater property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Heater control is only supported on WandererCover. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/flatdevice/set-openposition")]
+        public void FlatDeviceSetOpenPosition([QueryField] float angle)
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                if (!AdvancedAPI.Controls.FlatDevice.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("FlatDevice not connected", 409));
+                }
+                else
+                {
+                    var mediator = AdvancedAPI.Controls.FlatDevice;
+                    var mediatorType = mediator.GetType();
+
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active flat device available", 500));
+                    }
+                    else
+                    {
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("Wanderer"))
+                        {
+                            var openPositionProperty = deviceType.GetProperty("OpenPositionAngle",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (openPositionProperty != null)
+                            {
+                                var setMethod = openPositionProperty.GetSetMethod(true);
+                                if (setMethod != null)
+                                {
+                                    setMethod.Invoke(device, new object[] { angle });
+                                    response.Response = "Open position set";
+                                }
+                                else
+                                {
+                                    response = CoreUtility.CreateErrorTable(new Error("OpenPosition property has no setter", 501));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererCover does not have OpenPosition property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Open position control is only supported on WandererCover. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/flatdevice/get-openposition")]
+        public void FlatDeviceGetOpenPosition()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                if (!AdvancedAPI.Controls.FlatDevice.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("FlatDevice not connected", 409));
+                }
+                else
+                {
+                    var mediator = AdvancedAPI.Controls.FlatDevice;
+                    var mediatorType = mediator.GetType();
+
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active flat device available", 500));
+                    }
+                    else
+                    {
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("Wanderer"))
+                        {
+                            var openPositionProperty = deviceType.GetProperty("OpenPositionAngle",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (openPositionProperty != null)
+                            {
+                                try
+                                {
+                                    var openPositionValue = openPositionProperty.GetValue(device);
+                                    response.Response = openPositionValue;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"Failed to get OpenPosition value: {ex.Message}");
+                                    response = CoreUtility.CreateErrorTable(new Error($"Failed to get open position: {ex.InnerException?.Message ?? ex.Message}", 500));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererCover does not have OpenPosition property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Open position control is only supported on WandererCover. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/flatdevice/set-closedposition")]
+        public void FlatDeviceSetClosedPosition([QueryField] float angle)
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                if (!AdvancedAPI.Controls.FlatDevice.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("FlatDevice not connected", 409));
+                }
+                else
+                {
+                    var mediator = AdvancedAPI.Controls.FlatDevice;
+                    var mediatorType = mediator.GetType();
+
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active flat device available", 500));
+                    }
+                    else
+                    {
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("Wanderer"))
+                        {
+                            var closedPositionProperty = deviceType.GetProperty("ClosedPositionAngle",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (closedPositionProperty != null)
+                            {
+                                var setMethod = closedPositionProperty.GetSetMethod(true);
+                                if (setMethod != null)
+                                {
+                                    setMethod.Invoke(device, new object[] { angle });
+                                    response.Response = "Closed position set";
+                                }
+                                else
+                                {
+                                    response = CoreUtility.CreateErrorTable(new Error("ClosePosition property has no setter", 501));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererCover does not have ClosedPosition property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Closed position control is only supported on WandererCover. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/flatdevice/get-closedposition")]
+        public void FlatDeviceGetClosedPosition()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                if (!AdvancedAPI.Controls.FlatDevice.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("FlatDevice not connected", 409));
+                }
+                else
+                {
+                    var mediator = AdvancedAPI.Controls.FlatDevice;
+                    var mediatorType = mediator.GetType();
+
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active flat device available", 500));
+                    }
+                    else
+                    {
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("Wanderer"))
+                        {
+                            var closedPositionProperty = deviceType.GetProperty("ClosePositionAngle",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (closedPositionProperty != null)
+                            {
+                                try
+                                {
+                                    var closedPositionValue = closedPositionProperty.GetValue(device);
+                                    response.Response = closedPositionValue;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"Failed to get ClosedPosition value: {ex.Message}");
+                                    response = CoreUtility.CreateErrorTable(new Error($"Failed to get closed position: {ex.InnerException?.Message ?? ex.Message}", 500));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererCover does not have ClosedPosition property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Closed position control is only supported on WandererCover. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/flatdevice/get-currentposition")]
+        public void FlatDeviceGetCurrentPosition()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                if (!AdvancedAPI.Controls.FlatDevice.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("FlatDevice not connected", 409));
+                }
+                else
+                {
+                    var mediator = AdvancedAPI.Controls.FlatDevice;
+                    var mediatorType = mediator.GetType();
+
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active flat device available", 500));
+                    }
+                    else
+                    {
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("Wanderer"))
+                        {
+                            var currentPositionProperty = deviceType.GetProperty("CurrentPositionAngle",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (currentPositionProperty != null)
+                            {
+                                try
+                                {
+                                    var currentPositionValue = currentPositionProperty.GetValue(device);
+                                    response.Response = currentPositionValue;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"Failed to get Position value: {ex.Message}");
+                                    response = CoreUtility.CreateErrorTable(new Error($"Failed to get current position: {ex.InnerException?.Message ?? ex.Message}", 500));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererCover does not have Position property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Current position is only supported on WandererCover. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
     }
 }

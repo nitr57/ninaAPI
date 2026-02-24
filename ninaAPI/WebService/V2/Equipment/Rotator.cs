@@ -246,5 +246,242 @@ namespace ninaAPI.WebService.V2
 
             HttpContext.WriteToResponse(response);
         }
+
+        [Route(HttpVerbs.Get, "/equipment/rotator/reset-position")]
+        public void RotatorResetPosition()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (!AdvancedAPI.Controls.Rotator.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Rotator not connected", 409));
+                }
+                else
+                {
+                    // get RotatorVM handler and call ResetPosition on underlying device if available
+                    var rotatorVm = (RotatorVM)typeof(RotatorMediator).GetField("handler", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(AdvancedAPI.Controls.Rotator);
+                    var device = rotatorVm?.Rotator;
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No rotator device available", 500));
+                    }
+                    else
+                    {
+                        var mi = device.GetType().GetMethod("ResetPosition", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                        if (mi != null)
+                        {
+                            mi.Invoke(device, null);
+                            response.Response = "ResetPosition invoked";
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error("Reset not supported by this rotator", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/rotator/set-backlash")]
+        public void RotatorSetBacklash([QueryField] float angle)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (!AdvancedAPI.Controls.Rotator.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Rotator not connected", 409));
+                }
+                else
+                {
+                    // Get the device from the mediator via the handler
+                    var mediator = AdvancedAPI.Controls.Rotator;
+
+                    // The mediator has a handler (IRotatorVM) which can give us the actual device
+                    var mediatorType = mediator.GetType();
+
+                    // Try to get handler field (it's protected)
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        // Call GetDevice() method on the handler to get the actual device
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active rotator device available", 500));
+                    }
+                    else
+                    {
+                        // Check if device is WandererRotator or has Backlash property
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        // Check if it's WandererRotator by type name or try to get Backlash property
+                        if (deviceTypeName.Contains("WandererRotator") || deviceTypeName.Contains("Wanderer"))
+                        {
+                            // Try to get and invoke the Backlash property/method
+                            var backlashProperty = deviceType.GetProperty("Backlash",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (backlashProperty != null)
+                            {
+                                // If it's a property with a setter, we need to invoke it appropriately
+                                var setMethod = backlashProperty.GetSetMethod(true);
+                                if (setMethod != null)
+                                {
+                                    // Invoke setter with float backlash angle
+                                    try
+                                    {
+                                        setMethod.Invoke(device, new object[] { angle });
+                                        response.Response = $"Backlash setter invoked successfully with angle {angle}°";
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        response = CoreUtility.CreateErrorTable(new Error($"Failed to set backlash: {ex.InnerException?.Message ?? ex.Message}", 500));
+                                    }
+                                }
+                                else
+                                {
+                                    response = CoreUtility.CreateErrorTable(new Error("Backlash property has no setter", 501));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererRotator does not have Backlash property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Backlash is only supported on WandererRotator. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/rotator/get-backlash")]
+        public void RotatorGetBacklash()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (!AdvancedAPI.Controls.Rotator.GetInfo().Connected)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Rotator not connected", 409));
+                }
+                else
+                {
+                    // Get the device from the mediator via the handler
+                    var mediator = AdvancedAPI.Controls.Rotator;
+                    var mediatorType = mediator.GetType();
+
+                    // Try to get handler field (it's protected)
+                    var handlerField = mediatorType.GetField("handler",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    object handler = null;
+                    if (handlerField != null)
+                    {
+                        handler = handlerField.GetValue(mediator);
+                    }
+
+                    object device = null;
+                    if (handler != null)
+                    {
+                        // Call GetDevice() method on the handler to get the actual device
+                        var getDeviceMethod = handler.GetType().GetMethod("GetDevice",
+                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                        if (getDeviceMethod != null)
+                        {
+                            device = getDeviceMethod.Invoke(handler, null);
+                        }
+                    }
+
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No active rotator device available", 500));
+                    }
+                    else
+                    {
+                        // Check if device is WandererRotator
+                        var deviceType = device.GetType();
+                        var deviceTypeName = deviceType.Name;
+
+                        if (deviceTypeName.Contains("WandererRotator") || deviceTypeName.Contains("Wanderer"))
+                        {
+                            // Try to get the Backlash property value
+                            var backlashProperty = deviceType.GetProperty("Backlash",
+                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                            if (backlashProperty != null)
+                            {
+                                try
+                                {
+                                    var backlashValue = backlashProperty.GetValue(device);
+                                    response.Response = backlashValue;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Error($"Failed to get Backlash value: {ex.Message}");
+                                    response = CoreUtility.CreateErrorTable(new Error($"Failed to get backlash: {ex.InnerException?.Message ?? ex.Message}", 500));
+                                }
+                            }
+                            else
+                            {
+                                response = CoreUtility.CreateErrorTable(new Error("WandererRotator does not have Backlash property", 501));
+                            }
+                        }
+                        else
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Backlash is only supported on WandererRotator. Current device: {deviceTypeName}", 501));
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
     }
 }
