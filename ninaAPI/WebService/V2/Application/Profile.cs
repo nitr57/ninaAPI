@@ -294,6 +294,92 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/profile/add")]
+        public void ProfileAdd()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                AdvancedAPI.Controls.Profile.Add();
+                response.Response = "Successfully created a default profile";
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/profile/clone")]
+        public void ProfileClone([QueryField] string profileid)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                Guid guid = Guid.Parse(profileid);
+                IEnumerable<ProfileMeta> x = AdvancedAPI.Controls.Profile.Profiles.Where(x => x.Id == guid);
+                if (x.Any())
+                {
+                    ProfileMeta profile = x.First();
+                    AdvancedAPI.Controls.Profile.Clone(profile);
+                    response.Response = "Successfully cloned profile";
+                }
+                else
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("No profile with specified id found!", 400));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/profile/remove")]
+        public void ProfileRemove([QueryField] string profileid)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                Guid guid = Guid.Parse(profileid);
+
+                // We cannot remove the active profile
+                if (AdvancedAPI.Controls.Profile.ActiveProfile.Id == guid)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Cannot remove active profile!", 400));
+                }
+                else
+                {
+                    IEnumerable<ProfileMeta> x = AdvancedAPI.Controls.Profile.Profiles.Where(x => x.Id == guid);
+                    if (x.Any())
+                    {
+                        ProfileMeta profile = x.First();
+                        AdvancedAPI.Controls.Profile.RemoveProfile(profile);
+                        response.Response = "Successfully removed profile";
+                    }
+                    else
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No profile with specified id found!", 400));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         class HorizonResponse
         {
             public double[] Altitudes { get; set; }
