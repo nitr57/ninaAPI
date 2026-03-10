@@ -673,7 +673,7 @@ namespace ninaAPI.WebService.V2
                             new BinningMode(cam.GetInfo().BinX, cam.GetInfo().BinY),
                             1);
 
-                        if (gain > 0)
+                        if (!HttpContext.IsParameterOmitted(nameof(gain)) && gain >= 0)
                         {
                             sequence.Gain = gain;
                         }
