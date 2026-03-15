@@ -172,6 +172,14 @@ namespace ninaAPI.WebService.V2
                     flats.GetIterations().Iterations = count;
                     flats.MaxBrightness = HttpContext.IsParameterOmitted(nameof(maxBrightness)) ? flats.MaxBrightness : maxBrightness;
                     flats.MinBrightness = HttpContext.IsParameterOmitted(nameof(minBrightness)) ? flats.MinBrightness : minBrightness;
+
+                    // Override the hardcoded [1,100] expression range with the device's actual brightness range
+                    // so Validate() accepts values beyond 100 for panels that support them (e.g. 0-255)
+                    var flatDeviceInfo = AdvancedAPI.Controls.FlatDevice.GetInfo();
+                    double deviceMax = flatDeviceInfo.Connected ? flatDeviceInfo.MaxBrightness : 0; // 0 = ExpressionRange.NO_MAXIMUM
+                    flats.MaxBrightnessExpression.Range = new double[] { 0, deviceMax, 0 };
+                    flats.MinBrightnessExpression.Range = new double[] { 0, deviceMax, 0 };
+
                     flats.HistogramTargetPercentage = HttpContext.IsParameterOmitted(nameof(histogramMean)) ? flats.HistogramTargetPercentage : histogramMean;
                     flats.HistogramTolerancePercentage = HttpContext.IsParameterOmitted(nameof(meanTolerance)) ? flats.HistogramTolerancePercentage : meanTolerance;
                     flats.GetExposureItem().Gain = HttpContext.IsParameterOmitted(nameof(gain)) ? flats.GetExposureItem().Gain : gain;
