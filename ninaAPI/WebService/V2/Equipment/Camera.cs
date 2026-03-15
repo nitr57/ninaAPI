@@ -162,6 +162,7 @@ namespace ninaAPI.WebService.V2
         private static PlateSolveResult plateSolveResult;
         private static bool isBayered;
         private static Task CaptureTask;
+        private static Dictionary<string, object> lastCaptureStatistics;
 
         private static CancellationTokenSource CameraCoolToken;
 
@@ -506,6 +507,31 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/equipment/camera/capture/statistics/full")]
+        public void CameraCaptureFullStats()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (lastCaptureStatistics == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("No capture processed", 400));
+                }
+                else
+                {
+                    response.Response = lastCaptureStatistics;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/camera/capture/statistics")]
         public async Task CameraCaptureStats()
         {
@@ -526,12 +552,20 @@ namespace ninaAPI.WebService.V2
                     Dictionary<string, object> stats = new Dictionary<string, object>() {
                         { "Stars", img.RawImageData.StarDetectionAnalysis.DetectedStars },
                         { "HFR", img.RawImageData.StarDetectionAnalysis.HFR },
+                        { "HFRStDev", img.RawImageData.StarDetectionAnalysis.HFRStDev },
                         { "Median", s.Median },
                         { "MedianAbsoluteDeviation", s.MedianAbsoluteDeviation },
                         { "Mean", s.Mean },
                         { "Max", s.Max },
+                        { "MaxOccurrences", s.MaxOccurrences },
                         { "Min", s.Min },
+                        { "MinOccurrences", s.MinOccurrences },
                         { "StDev", s.StDev },
+                        { "Width", img.RawImageData.Properties.Width },
+                        { "Height", img.RawImageData.Properties.Height },
+                        { "BitDepth", img.RawImageData.Properties.BitDepth },
+                        { "Gain", img.RawImageData.Properties.Gain },
+                        { "Offset", img.RawImageData.Properties.Offset },
                 };
 
                     response.Response = stats;
@@ -698,6 +732,27 @@ namespace ninaAPI.WebService.V2
 
                         isBayered = renderedImage.RawImageData.Properties.IsBayered;
 
+                        var detectedImage = await renderedImage.DetectStars(false, StarSensitivityEnum.Normal, NoiseReductionEnum.None);
+                        var captureStats = ImageStatistics.Create(detectedImage.RawImageData);
+                        lastCaptureStatistics = new Dictionary<string, object>()
+                        {
+                            { "Stars", detectedImage.RawImageData.StarDetectionAnalysis.DetectedStars },
+                            { "HFR", detectedImage.RawImageData.StarDetectionAnalysis.HFR },
+                            { "HFRStDev", detectedImage.RawImageData.StarDetectionAnalysis.HFRStDev },
+                            { "Median", captureStats.Median },
+                            { "MedianAbsoluteDeviation", captureStats.MedianAbsoluteDeviation },
+                            { "Mean", captureStats.Mean },
+                            { "Max", captureStats.Max },
+                            { "MaxOccurrences", captureStats.MaxOccurrences },
+                            { "Min", captureStats.Min },
+                            { "MinOccurrences", captureStats.MinOccurrences },
+                            { "StDev", captureStats.StDev },
+                            { "Width", renderedImage.RawImageData.Properties.Width },
+                            { "Height", renderedImage.RawImageData.Properties.Height },
+                            { "BitDepth", renderedImage.RawImageData.Properties.BitDepth },
+                            { "Gain", renderedImage.RawImageData.Properties.Gain },
+                            { "Offset", renderedImage.RawImageData.Properties.Offset },
+                        };
 
                         if (solve)
                         {
