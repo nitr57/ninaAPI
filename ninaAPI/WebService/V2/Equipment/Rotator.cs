@@ -483,5 +483,51 @@ namespace ninaAPI.WebService.V2
 
             HttpContext.WriteToResponse(response);
         }
+
+        [Route(HttpVerbs.Get, "/equipment/rotator/set-setting")]
+        public void RotatorSetSetting([QueryField] string settingName, [QueryField] string newValue)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (string.IsNullOrEmpty(settingName))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Invalid setting name", 400));
+                }
+                else if (string.IsNullOrEmpty(newValue))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("New value can't be null", 400));
+                }
+                else
+                {
+                    var device = AdvancedAPI.Controls.Rotator.GetDevice();
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Rotator device not available", 409));
+                    }
+                    else
+                    {
+                        var prop = device.GetType().GetProperty(settingName);
+                        if (prop == null)
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Setting '{settingName}' not found", 400));
+                        }
+                        else
+                        {
+                            prop.SetValue(device, newValue.ConvertString(prop.PropertyType));
+                            response.Response = "Setting updated";
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
     }
 }
