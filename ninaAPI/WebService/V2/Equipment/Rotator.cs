@@ -484,6 +484,45 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/equipment/rotator/get-settings")]
+        public void RotatorGetSettings()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var device = AdvancedAPI.Controls.Rotator.GetDevice();
+                if (device == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Rotator device not available", 409));
+                }
+                else
+                {
+                    var properties = device.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    var settings = new Dictionary<string, object>();
+                    foreach (var prop in properties)
+                    {
+                        if (prop.CanRead)
+                        {
+                            try
+                            {
+                                settings[prop.Name] = prop.GetValue(device);
+                            }
+                            catch { }
+                        }
+                    }
+                    response.Response = settings;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/rotator/set-setting")]
         public void RotatorSetSetting([QueryField] string settingName, [QueryField] string newValue)
         {

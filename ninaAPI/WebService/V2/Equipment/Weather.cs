@@ -17,6 +17,7 @@ using NINA.Equipment.Equipment.MyWeatherData;
 using NINA.Equipment.Interfaces.Mediator;
 using ninaAPI.Utility;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ninaAPI.WebService.V2
@@ -64,6 +65,45 @@ namespace ninaAPI.WebService.V2
 
                 WeatherDataInfo info = Weather.GetInfo();
                 response.Response = info;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/weather/get-settings")]
+        public void WeatherGetSettings()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var device = AdvancedAPI.Controls.Weather.GetDevice();
+                if (device == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Weather device not available", 409));
+                }
+                else
+                {
+                    var properties = device.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    var settings = new Dictionary<string, object>();
+                    foreach (var prop in properties)
+                    {
+                        if (prop.CanRead)
+                        {
+                            try
+                            {
+                                settings[prop.Name] = prop.GetValue(device);
+                            }
+                            catch { }
+                        }
+                    }
+                    response.Response = settings;
+                }
             }
             catch (Exception ex)
             {

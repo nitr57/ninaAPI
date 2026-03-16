@@ -17,6 +17,7 @@ using NINA.Equipment.Equipment.MySwitch;
 using NINA.Equipment.Interfaces.Mediator;
 using ninaAPI.Utility;
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -96,6 +97,45 @@ namespace ninaAPI.WebService.V2
                     SwitchToken = new CancellationTokenSource();
                     sw.SetSwitchValue(index, value, AdvancedAPI.Controls.StatusMediator.GetStatus(), SwitchToken.Token);
                     response.Response = "Switch value updated";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/switch/get-settings")]
+        public void SwitchGetSettings()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var device = AdvancedAPI.Controls.Switch.GetDevice();
+                if (device == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Switch device not available", 409));
+                }
+                else
+                {
+                    var properties = device.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    var settings = new Dictionary<string, object>();
+                    foreach (var prop in properties)
+                    {
+                        if (prop.CanRead)
+                        {
+                            try
+                            {
+                                settings[prop.Name] = prop.GetValue(device);
+                            }
+                            catch { }
+                        }
+                    }
+                    response.Response = settings;
                 }
             }
             catch (Exception ex)

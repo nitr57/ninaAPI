@@ -69,6 +69,45 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/equipment/safetymonitor/get-settings")]
+        public void SafetyMonitorGetSettings()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var device = AdvancedAPI.Controls.SafetyMonitor.GetDevice();
+                if (device == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("SafetyMonitor device not available", 409));
+                }
+                else
+                {
+                    var properties = device.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    var settings = new Dictionary<string, object>();
+                    foreach (var prop in properties)
+                    {
+                        if (prop.CanRead)
+                        {
+                            try
+                            {
+                                settings[prop.Name] = prop.GetValue(device);
+                            }
+                            catch { }
+                        }
+                    }
+                    response.Response = settings;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/safetymonitor/set-setting")]
         public void SafetyMonitorSetSetting([QueryField] string settingName, [QueryField] string newValue)
         {

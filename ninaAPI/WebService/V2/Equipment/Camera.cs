@@ -833,6 +833,45 @@ namespace ninaAPI.WebService.V2
             return false;
         }
 
+        [Route(HttpVerbs.Get, "/equipment/camera/get-settings")]
+        public void CameraGetSettings()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var device = AdvancedAPI.Controls.Camera.GetDevice();
+                if (device == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Camera device not available", 409));
+                }
+                else
+                {
+                    var properties = device.GetType().GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    var settings = new Dictionary<string, object>();
+                    foreach (var prop in properties)
+                    {
+                        if (prop.CanRead)
+                        {
+                            try
+                            {
+                                settings[prop.Name] = prop.GetValue(device);
+                            }
+                            catch { }
+                        }
+                    }
+                    response.Response = settings;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/camera/set-setting")]
         public void CameraSetSetting([QueryField] string settingName, [QueryField] string newValue)
         {
