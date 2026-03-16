@@ -698,6 +698,7 @@ namespace ninaAPI.WebService.V2
                     CaptureTask = Task.Run(async () =>
                     {
                         plateSolveResult = null;
+                        lastCaptureStatistics = null;
                         IPlateSolveSettings settings = AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings;
 
                         CaptureSequence sequence = new CaptureSequence(
