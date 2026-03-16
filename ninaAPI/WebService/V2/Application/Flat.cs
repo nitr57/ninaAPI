@@ -16,7 +16,10 @@ using System.Threading.Tasks;
 using EmbedIO;
 using EmbedIO.Routing;
 using EmbedIO.WebApi;
+using NINA.Core.Model;
+using NINA.Core.Model.Equipment;
 using NINA.Core.Utility;
+using NINA.Profile;
 using NINA.Profile.Interfaces;
 using NINA.Sequencer.Conditions;
 using NINA.Sequencer.Container;
@@ -286,7 +289,7 @@ namespace ninaAPI.WebService.V2
                                                                 AdvancedAPI.Controls.FlatDevice);
 
                     flats.GetIterations().Iterations = count;
-                    flats.MaxExposure = HttpContext.IsParameterOmitted(nameof(minExposure)) ? flats.MaxExposure : maxExposure;
+                    flats.MaxExposure = HttpContext.IsParameterOmitted(nameof(maxExposure)) ? flats.MaxExposure : maxExposure;
                     flats.MinExposure = HttpContext.IsParameterOmitted(nameof(minExposure)) ? flats.MinExposure : minExposure;
                     flats.GetSetBrightnessItem().Brightness = HttpContext.IsParameterOmitted(nameof(brightness)) ? flats.GetSetBrightnessItem().Brightness : brightness;
                     flats.HistogramTargetPercentage = HttpContext.IsParameterOmitted(nameof(histogramMean)) ? flats.HistogramTargetPercentage : histogramMean;
@@ -559,6 +562,110 @@ namespace ninaAPI.WebService.V2
                 response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
             }
 
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/flats/trained-settings")]
+        public void GetTrainedFlatSettings()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                response.Response = AdvancedAPI.Controls.Profile.ActiveProfile.FlatDeviceSettings.TrainedFlatExposureSettings;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/flats/add-trained-setting")]
+        public void AddTrainedFlatSetting()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                AdvancedAPI.Controls.Profile.ActiveProfile.FlatDeviceSettings.AddEmptyTrainedExposureSetting();
+                response.Response = "Setting added";
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/flats/update-trained-setting")]
+        public void UpdateTrainedFlatSetting([QueryField] int index,
+                                             [QueryField] int filterId,
+                                             [QueryField] string binning,
+                                             [QueryField] int gain,
+                                             [QueryField] int offset,
+                                             [QueryField] int brightness,
+                                             [QueryField] double time)
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                var settings = AdvancedAPI.Controls.Profile.ActiveProfile.FlatDeviceSettings.TrainedFlatExposureSettings;
+                if (index < 0 || index >= settings.Count)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Index out of range", 400));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+                var setting = settings[index];
+                if (!HttpContext.IsParameterOmitted(nameof(filterId)))
+                    setting.Filter = (short)filterId;
+                if (!HttpContext.IsParameterOmitted(nameof(binning)))
+                {
+                    string[] parts = binning.Split('x');
+                    if (parts.Length == 2 && short.TryParse(parts[0], out short bx) && short.TryParse(parts[1], out short by))
+                        setting.Binning = new BinningMode(bx, by);
+                }
+                if (!HttpContext.IsParameterOmitted(nameof(gain)))
+                    setting.Gain = gain;
+                if (!HttpContext.IsParameterOmitted(nameof(offset)))
+                    setting.Offset = offset;
+                if (!HttpContext.IsParameterOmitted(nameof(brightness)))
+                    setting.Brightness = brightness;
+                if (!HttpContext.IsParameterOmitted(nameof(time)))
+                    setting.Time = time;
+                response.Response = "Setting updated";
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/flats/remove-trained-setting")]
+        public void RemoveTrainedFlatSetting([QueryField] int index)
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                var settings = AdvancedAPI.Controls.Profile.ActiveProfile.FlatDeviceSettings.TrainedFlatExposureSettings;
+                if (index < 0 || index >= settings.Count)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Index out of range", 400));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+                var setting = settings[index];
+                AdvancedAPI.Controls.Profile.ActiveProfile.FlatDeviceSettings.RemoveFlatExposureSetting(setting);
+                response.Response = "Setting removed";
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
             HttpContext.WriteToResponse(response);
         }
 
