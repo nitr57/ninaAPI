@@ -116,6 +116,7 @@ namespace ninaAPI.WebService.V2
                 Gain = cam.GetInfo().Gain,
                 offsetMax = cam.GetInfo().offsetMax,
                 offsetMin = cam.GetInfo().offsetMin,
+                TempChangeRunning = cam.TempChangeRunning,
                 TargetTemp = cam.TargetTemp,
                 AtTargetTemp = cam.GetInfo().Temperature == cam.GetInfo().TemperatureSetPoint,
             };
