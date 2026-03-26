@@ -404,6 +404,50 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/equipment/focuser/send-command")]
+        public void FocuserSendCommand([QueryField] string command)
+        {
+            HttpResponse response = new HttpResponse();
+
+            var allowedCommands = new HashSet<string> { "ClearStall", "ResetPosition" };
+
+            try
+            {
+                if (string.IsNullOrEmpty(command) || !allowedCommands.Contains(command))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error($"Command '{command}' not allowed", 400));
+                }
+                else
+                {
+                    var device = AdvancedAPI.Controls.Focuser.GetDevice();
+                    if (device == null)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Focuser device not available", 409));
+                    }
+                    else
+                    {
+                        var method = device.GetType().GetMethod(command);
+                        if (method == null)
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"Command '{command}' not supported by this device", 409));
+                        }
+                        else
+                        {
+                            method.Invoke(device, null);
+                            response.Response = $"Command '{command}' executed";
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/focuser/set-setting")]
         public void FocuserSetSetting([QueryField] string settingName, [QueryField] string newValue)
         {
