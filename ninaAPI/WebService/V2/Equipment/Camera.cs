@@ -37,6 +37,7 @@ using NINA.Core.Enum;
 using System.Reflection;
 using Accord;
 using NINA.Equipment.Interfaces;
+using NINA.WPF.Base.Interfaces.Mediator;
 
 namespace ninaAPI.WebService.V2
 {
@@ -142,6 +143,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Camera.Disconnected += CameraDisconnectedHandler;
             AdvancedAPI.Controls.Camera.DownloadTimeout += CameraDownloadTimeoutHandler;
             AdvancedAPI.Controls.Camera.RegisterConsumer(this);
+            AdvancedAPI.Controls.ImageSaveMediator.ImageSaved += OnImageSaved;
         }
 
         public void StopWatchers()
@@ -150,11 +152,36 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Camera.Disconnected -= CameraDisconnectedHandler;
             AdvancedAPI.Controls.Camera.DownloadTimeout -= CameraDownloadTimeoutHandler;
             AdvancedAPI.Controls.Camera.RemoveConsumer(this);
+            AdvancedAPI.Controls.ImageSaveMediator.ImageSaved -= OnImageSaved;
         }
 
         public async void UpdateDeviceInfo(CameraInfo deviceInfo)
         {
             await WebSocketV2.SendConsumerEvent("CAMERA");
+        }
+
+        private static void OnImageSaved(object sender, ImageSavedEventArgs e)
+        {
+            ControllerV2.lastCaptureStatistics = new Dictionary<string, object>()
+            {
+                { "Timestamp", DateTime.UtcNow },
+                { "Stars", e.StarDetectionAnalysis?.DetectedStars ?? 0 },
+                { "HFR", e.StarDetectionAnalysis?.HFR ?? 0 },
+                { "HFRStDev", e.StarDetectionAnalysis?.HFRStDev ?? 0 },
+                { "Median", e.Statistics?.Median ?? 0 },
+                { "MedianAbsoluteDeviation", e.Statistics?.MedianAbsoluteDeviation ?? 0 },
+                { "Mean", e.Statistics?.Mean ?? 0 },
+                { "Max", e.Statistics?.Max ?? 0 },
+                { "MaxOccurrences", e.Statistics?.MaxOccurrences ?? 0 },
+                { "Min", e.Statistics?.Min ?? 0 },
+                { "MinOccurrences", e.Statistics?.MinOccurrences ?? 0 },
+                { "StDev", e.Statistics?.StDev ?? 0 },
+                { "Width", e.Image?.PixelWidth ?? 0 },
+                { "Height", e.Image?.PixelHeight ?? 0 },
+                { "BitDepth", e.Statistics?.BitDepth ?? 0 },
+                { "Gain", e.MetaData?.Camera.Gain ?? -1 },
+                { "Offset", e.MetaData?.Camera.Offset ?? -1 },
+            };
         }
     }
 
@@ -163,7 +190,7 @@ namespace ninaAPI.WebService.V2
         private static PlateSolveResult plateSolveResult;
         private static bool isBayered;
         private static Task CaptureTask;
-        private static Dictionary<string, object> lastCaptureStatistics;
+        internal static Dictionary<string, object> lastCaptureStatistics;
 
         private static CancellationTokenSource CameraCoolToken;
 
@@ -738,6 +765,7 @@ namespace ninaAPI.WebService.V2
                         var captureStats = ImageStatistics.Create(detectedImage.RawImageData);
                         lastCaptureStatistics = new Dictionary<string, object>()
                         {
+                            { "Timestamp", DateTime.UtcNow },
                             { "Stars", detectedImage.RawImageData.StarDetectionAnalysis.DetectedStars },
                             { "HFR", detectedImage.RawImageData.StarDetectionAnalysis.HFR },
                             { "HFRStDev", detectedImage.RawImageData.StarDetectionAnalysis.HFRStDev },
