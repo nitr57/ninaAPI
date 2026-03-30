@@ -885,7 +885,9 @@ namespace ninaAPI.WebService.V2
                         {
                             try
                             {
-                                settings[prop.Name] = prop.GetValue(device);
+                                var value = prop.GetValue(device);
+                                if (value is Array arr && arr.Rank > 1) continue;
+                                settings[prop.Name] = value;
                             }
                             catch { }
                         }
