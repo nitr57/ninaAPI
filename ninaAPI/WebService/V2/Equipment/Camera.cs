@@ -881,13 +881,11 @@ namespace ninaAPI.WebService.V2
                     var settings = new Dictionary<string, object>();
                     foreach (var prop in properties)
                     {
-                        if (prop.CanRead)
+                        if (prop.CanRead && prop.PropertyType != typeof(object))
                         {
                             try
                             {
-                                var value = prop.GetValue(device);
-                                if (value is Array arr && arr.Rank > 1) continue;
-                                settings[prop.Name] = value;
+                                settings[prop.Name] = prop.GetValue(device);
                             }
                             catch { }
                         }
