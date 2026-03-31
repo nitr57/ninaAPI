@@ -718,6 +718,7 @@ namespace ninaAPI.WebService.V2
         public string State { get; }
         public int TotalIterations { get; }
         public int CompletedIterations { get; }
+        public double? CurrentADU { get; }
 
         public FlatStatusResponse(SequentialContainer container, Task task)
         {
@@ -741,6 +742,12 @@ namespace ninaAPI.WebService.V2
                 TotalIterations = -1;
                 CompletedIterations = -1;
             }
+
+            double rawADU = 0;
+            if (container is AutoExposureFlat aef) rawADU = aef.DeterminedHistogramADU;
+            else if (container is AutoBrightnessFlat abf) rawADU = abf.DeterminedHistogramADU;
+            else if (container is SkyFlat sf) rawADU = sf.DeterminedHistogramADU;
+            CurrentADU = rawADU > 0 ? rawADU : (double?)null;
         }
     }
 }
