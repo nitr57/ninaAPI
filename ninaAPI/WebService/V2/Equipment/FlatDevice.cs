@@ -562,7 +562,7 @@ namespace ninaAPI.WebService.V2
 
                         if (deviceTypeName.Contains("Wanderer"))
                         {
-                            var closedPositionProperty = deviceType.GetProperty("ClosedPositionAngle",
+                            var closedPositionProperty = deviceType.GetProperty("ClosePositionAngle",
                                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
 
                             if (closedPositionProperty != null)
