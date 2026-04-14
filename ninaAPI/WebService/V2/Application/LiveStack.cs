@@ -139,6 +139,11 @@ namespace ninaAPI.WebService.V2
             }
         }
 
+        public static void ResetHistory()
+        {
+            LiveStackHistory = new LiveStackHistory();
+        }
+
         public void StartWatchers()
         {
             AdvancedAPI.Controls.MessageBroker.Subscribe("Livestack_LivestackDockable_StatusBroadcast", this);
@@ -198,6 +203,28 @@ namespace ninaAPI.WebService.V2
             {
                 AdvancedAPI.Controls.MessageBroker.Publish(new LiveStackMessage(Guid.NewGuid(), "Livestack_LivestackDockable_StopLiveStack", string.Empty));
                 response.Response = "Live stack stopped";
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/livestack/reset")]
+        public async Task LiveStackReset()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                AdvancedAPI.Controls.MessageBroker.Publish(new LiveStackMessage(Guid.NewGuid(), "Livestack_LivestackDockable_ResetLiveStack", string.Empty));
+                LiveStackWatcher.LiveStackHistory?.Dispose();
+                LiveStackWatcher.ResetHistory();
+                await WebSocketV2.SendAndAddEvent("STACK-RESET", new Dictionary<string, object>());
+                response.Response = "Live stack reset";
             }
             catch (Exception ex)
             {
