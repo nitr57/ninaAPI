@@ -269,6 +269,36 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/equipment/guider/graph/clear")]
+        public void GuiderGraphClear()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                IGuiderMediator guider = AdvancedAPI.Controls.Guider;
+
+                var handlerField = guider.GetType().GetField("handler",
+                    System.Reflection.BindingFlags.NonPublic |
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.FlattenHierarchy);
+
+                IGuiderVM gvm = (IGuiderVM)handlerField.GetValue(guider);
+                var guiderProperty = gvm.GetType().GetProperty("GuideStepsHistory");
+
+                GuideStepsHistory history = (GuideStepsHistory)guiderProperty.GetValue(gvm);
+                history.Clear();
+                response.Response = "Guide graph cleared";
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/guider/get-settings")]
         public void GuiderGetSettings()
         {
