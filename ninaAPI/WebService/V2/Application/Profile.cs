@@ -257,6 +257,10 @@ namespace ninaAPI.WebService.V2
         {
             if (targetType == typeof(FilterInfo))
             {
+                if (newValue.Equals("null", StringComparison.OrdinalIgnoreCase))
+                {
+                    return null;
+                }
                 var filters = AdvancedAPI.Controls.Profile.ActiveProfile.FilterWheelSettings.FilterWheelFilters;
                 FilterInfo filter = filters.FirstOrDefault(f => f.Name == newValue)
                     ?? filters.FirstOrDefault(f => short.TryParse(newValue, out short pos) && f.Position == pos);
