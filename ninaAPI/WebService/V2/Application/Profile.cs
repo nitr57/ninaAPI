@@ -19,6 +19,7 @@ using EmbedIO.Routing;
 using EmbedIO.WebApi;
 using NINA.Core.Enum;
 using NINA.Core.Model;
+using NINA.Core.Model.Equipment;
 using NINA.Core.Utility;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
@@ -214,7 +215,7 @@ namespace ninaAPI.WebService.V2
                     if (pathSplit.Length == 1)
                     {
                         PropertyInfo prop = position.GetType().GetProperty(settingpath);
-                        prop.SetValue(position, newValue.ConvertString(prop.PropertyType));
+                        prop.SetValue(position, ResolveValue(prop.PropertyType, newValue));
                     }
                     else
                     {
@@ -237,7 +238,7 @@ namespace ninaAPI.WebService.V2
                             }
                         }
                         PropertyInfo prop = position.GetType().GetProperty(pathSplit[^1]);
-                        prop.SetValue(position, newValue.ConvertString(prop.PropertyType));
+                        prop.SetValue(position, ResolveValue(prop.PropertyType, newValue));
                     }
 
                     response.Response = "Updated setting";
@@ -250,6 +251,22 @@ namespace ninaAPI.WebService.V2
             }
 
             HttpContext.WriteToResponse(response);
+        }
+
+        private object ResolveValue(Type targetType, string newValue)
+        {
+            if (targetType == typeof(FilterInfo))
+            {
+                var filters = AdvancedAPI.Controls.Profile.ActiveProfile.FilterWheelSettings.FilterWheelFilters;
+                FilterInfo filter = filters.FirstOrDefault(f => f.Name == newValue)
+                    ?? filters.FirstOrDefault(f => short.TryParse(newValue, out short pos) && f.Position == pos);
+                if (filter == null)
+                {
+                    throw new ArgumentException($"Filter '{newValue}' not found in filter wheel settings.");
+                }
+                return filter;
+            }
+            return newValue.ConvertString(targetType);
         }
 
         private bool IsIndexable(object obj, out Type indexType, out PropertyInfo indexProp)
