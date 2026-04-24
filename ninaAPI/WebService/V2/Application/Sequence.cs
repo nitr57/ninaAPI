@@ -890,6 +890,11 @@ namespace ninaAPI.WebService.V2
                         container.Target.TargetName = name;
                         container.Target.PositionAngle = rotation;
                         container.Name = name;
+                        // Explicitly propagate the new coordinates to all child items, conditions,
+                        // and triggers. In headless mode WeakEventManager<InputTarget,EventArgs>
+                        // may post delivery to the WPF dispatcher queue which is never pumped,
+                        // so Target_OnCoordinatesChanged → AfterParentChanged() may not run.
+                        container.AfterParentChanged();
                         response.Response = "Target updated";
                     }
                 }
