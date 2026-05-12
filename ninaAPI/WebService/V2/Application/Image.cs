@@ -35,6 +35,24 @@ using ninaAPI.Utility;
 
 namespace ninaAPI.WebService.V2
 {
+    public class HistogramBucket
+    {
+        public double X { get; set; }
+        public double Y { get; set; }
+    }
+
+    public class PreparedImageStatistics
+    {
+        public double StDev { get; set; }
+        public double Mean { get; set; }
+        public double Median { get; set; }
+        public double MedianAbsoluteDeviation { get; set; }
+        public int Min { get; set; }
+        public int Max { get; set; }
+        public int BitDepth { get; set; }
+        public List<HistogramBucket> Histogram { get; set; }
+    }
+
     public class ImageResponse
     {
         public double ExposureTime { get; set; }
@@ -739,6 +757,47 @@ namespace ninaAPI.WebService.V2
                         }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/prepared-image/statistics")]
+        public async Task GetPreparedImageStatistics()
+        {
+            HttpResponse response = new HttpResponse();
+            try
+            {
+                IRenderedImage renderedImage;
+                lock (ImageWatcher.imageLock)
+                {
+                    renderedImage = ImageWatcher.PreparedImage;
+                }
+
+                if (renderedImage is null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("No image", 404));
+                    HttpContext.WriteToResponse(response);
+                    return;
+                }
+
+                var statistics = await renderedImage.RawImageData.Statistics;
+                response.Response = new PreparedImageStatistics
+                {
+                    StDev = statistics.StDev,
+                    Mean = statistics.Mean,
+                    Median = statistics.Median,
+                    MedianAbsoluteDeviation = statistics.MedianAbsoluteDeviation,
+                    Min = statistics.Min,
+                    Max = statistics.Max,
+                    BitDepth = statistics.BitDepth,
+                    Histogram = statistics.Histogram?.Select(p => new HistogramBucket { X = p.X, Y = p.Y }).ToList(),
+                };
             }
             catch (Exception ex)
             {
