@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 using EmbedIO;
 using EmbedIO.Routing;
 using EmbedIO.WebApi;
+using NINA.Core.Locale;
 using NINA.Core.Model;
 using NINA.Core.Model.Equipment;
 using NINA.Core.Utility;
@@ -24,6 +25,9 @@ using NINA.Profile.Interfaces;
 using NINA.Sequencer.Conditions;
 using NINA.Sequencer.Container;
 using NINA.Sequencer.SequenceItem.FlatDevice;
+using NINA.Sequencer.SequenceItem.FilterWheel;
+using NINA.Sequencer.SequenceItem.Imaging;
+using NINA.Sequencer.SequenceItem.Utility;
 using ninaAPI.Utility;
 
 namespace ninaAPI.WebService.V2
@@ -33,6 +37,62 @@ namespace ninaAPI.WebService.V2
         private static Task flatTask;
         private static CancellationTokenSource flatCancellationToken;
         private static SequentialContainer container;
+
+        /// <summary>
+        /// Builds a dark-flat container whose exposure settings mirror those discovered
+        /// (or explicitly set) on the completed <paramref name="flatContainer"/>.
+        /// </summary>
+        private static TrainedDarkFlatExposure BuildDarkFlatsContainer(
+            SequentialContainer flatContainer,
+            int darkCount,
+            bool keepClosed)
+        {
+            var darks = new TrainedDarkFlatExposure(
+                AdvancedAPI.Controls.Profile,
+                AdvancedAPI.Controls.Camera,
+                AdvancedAPI.Controls.Imaging,
+                AdvancedAPI.Controls.ImageSaveMediator,
+                AdvancedAPI.Controls.ImageHistory,
+                AdvancedAPI.Controls.FilterWheel,
+                AdvancedAPI.Controls.FlatDevice);
+
+            darks.GetIterations().Iterations = darkCount;
+            darks.KeepPanelClosed = keepClosed;
+
+            TakeExposure exposureItem = null;
+            SwitchFilter switchFilterItem = null;
+
+            if (flatContainer is AutoExposureFlat aef)
+            {
+                exposureItem = aef.GetExposureItem();
+                switchFilterItem = aef.GetSwitchFilterItem();
+            }
+            else if (flatContainer is AutoBrightnessFlat abf)
+            {
+                exposureItem = abf.GetExposureItem();
+                switchFilterItem = abf.GetSwitchFilterItem();
+            }
+            else if (flatContainer is SkyFlat sf)
+            {
+                exposureItem = sf.GetExposureItem();
+                switchFilterItem = sf.GetSwitchFilterItem();
+            }
+
+            if (exposureItem != null)
+            {
+                darks.GetExposureItem().ExposureTime = exposureItem.ExposureTime;
+                darks.GetExposureItem().Gain = exposureItem.Gain;
+                darks.GetExposureItem().Offset = exposureItem.Offset;
+                darks.GetExposureItem().Binning = exposureItem.Binning;
+            }
+
+            if (switchFilterItem != null)
+            {
+                darks.GetSwitchFilterItem().Filter = switchFilterItem.Filter;
+            }
+
+            return darks;
+        }
 
         [Route(HttpVerbs.Get, "/flats/skyflat")]
         public void SkyFlats([QueryField] int count,
@@ -44,7 +104,8 @@ namespace ninaAPI.WebService.V2
                             [QueryField] int filterId,
                             [QueryField] string binning,
                             [QueryField] int gain,
-                            [QueryField] int offset)
+                            [QueryField] int offset,
+                            [QueryField] int darkCount)
         {
             HttpResponse response = new HttpResponse();
 
@@ -122,7 +183,32 @@ namespace ninaAPI.WebService.V2
                     {
                         container = flats;
                         flatCancellationToken = new CancellationTokenSource();
-                        flatTask = flats.Execute(AdvancedAPI.Controls.StatusMediator.GetStatus(), flatCancellationToken.Token);
+                        var progress = AdvancedAPI.Controls.StatusMediator.GetStatus();
+                        var token = flatCancellationToken.Token;
+                        if (darkCount > 0)
+                        {
+                            flatTask = Task.Run(async () =>
+                            {
+                                await flats.Execute(progress, token);
+                                if (!token.IsCancellationRequested)
+                                {
+                                    var service = AdvancedAPI.Controls.WindowFactory.Create();
+                                    var msgResult = new MessageBoxResult(Loc.Instance["LblCoverScopeMsgBox"]);
+                                    using (token.Register(() => service?.Close()))
+                                        await service.ShowDialog(msgResult, Loc.Instance["LblCoverScopeMsgBoxTitle"]);
+                                    if (!msgResult.Continue || token.IsCancellationRequested)
+                                        return;
+                                    var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed: false);
+                                    container = darks;
+                                    if (darks.Validate())
+                                        await darks.Execute(progress, token);
+                                }
+                            });
+                        }
+                        else
+                        {
+                            flatTask = flats.Execute(progress, token);
+                        }
                         response.Response = "Process started";
                     }
                     else
@@ -152,7 +238,8 @@ namespace ninaAPI.WebService.V2
                                         [QueryField] int gain,
                                         [QueryField] int offset,
                                         [QueryField] double exposureTime,
-                                        [QueryField] bool keepClosed)
+                                        [QueryField] bool keepClosed,
+                                        [QueryField] int darkCount)
         {
             HttpResponse response = new HttpResponse();
 
@@ -237,7 +324,32 @@ namespace ninaAPI.WebService.V2
                     {
                         container = flats;
                         flatCancellationToken = new CancellationTokenSource();
-                        flatTask = flats.Execute(AdvancedAPI.Controls.StatusMediator.GetStatus(), flatCancellationToken.Token);
+                        var progress = AdvancedAPI.Controls.StatusMediator.GetStatus();
+                        var token = flatCancellationToken.Token;
+                        if (darkCount > 0)
+                        {
+                            flatTask = Task.Run(async () =>
+                            {
+                                await flats.Execute(progress, token);
+                                if (!token.IsCancellationRequested)
+                                {
+                                    var service = AdvancedAPI.Controls.WindowFactory.Create();
+                                    var msgResult = new MessageBoxResult(Loc.Instance["LblCoverScopeMsgBox"]);
+                                    using (token.Register(() => service?.Close()))
+                                        await service.ShowDialog(msgResult, Loc.Instance["LblCoverScopeMsgBoxTitle"]);
+                                    if (!msgResult.Continue || token.IsCancellationRequested)
+                                        return;
+                                    var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
+                                    container = darks;
+                                    if (darks.Validate())
+                                        await darks.Execute(progress, token);
+                                }
+                            });
+                        }
+                        else
+                        {
+                            flatTask = flats.Execute(progress, token);
+                        }
                         response.Response = "Process started";
                     }
                     else
@@ -268,7 +380,8 @@ namespace ninaAPI.WebService.V2
                                     [QueryField] int gain,
                                     [QueryField] int offset,
                                     [QueryField] double exposureTime,
-                                    [QueryField] bool keepClosed)
+                                    [QueryField] bool keepClosed,
+                                    [QueryField] int darkCount)
         {
             HttpResponse response = new HttpResponse();
 
@@ -346,7 +459,32 @@ namespace ninaAPI.WebService.V2
                     {
                         container = flats;
                         flatCancellationToken = new CancellationTokenSource();
-                        flatTask = flats.Execute(AdvancedAPI.Controls.StatusMediator.GetStatus(), flatCancellationToken.Token);
+                        var progress = AdvancedAPI.Controls.StatusMediator.GetStatus();
+                        var token = flatCancellationToken.Token;
+                        if (darkCount > 0)
+                        {
+                            flatTask = Task.Run(async () =>
+                            {
+                                await flats.Execute(progress, token);
+                                if (!token.IsCancellationRequested)
+                                {
+                                    var service = AdvancedAPI.Controls.WindowFactory.Create();
+                                    var msgResult = new MessageBoxResult(Loc.Instance["LblCoverScopeMsgBox"]);
+                                    using (token.Register(() => service?.Close()))
+                                        await service.ShowDialog(msgResult, Loc.Instance["LblCoverScopeMsgBoxTitle"]);
+                                    if (!msgResult.Continue || token.IsCancellationRequested)
+                                        return;
+                                    var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
+                                    container = darks;
+                                    if (darks.Validate())
+                                        await darks.Execute(progress, token);
+                                }
+                            });
+                        }
+                        else
+                        {
+                            flatTask = flats.Execute(progress, token);
+                        }
                         response.Response = "Process started";
                     }
                     else
@@ -716,6 +854,7 @@ namespace ninaAPI.WebService.V2
     public struct FlatStatusResponse
     {
         public string State { get; }
+        public string Type { get; }
         public int TotalIterations { get; }
         public int CompletedIterations { get; }
         public double? CurrentADU { get; }
@@ -730,6 +869,8 @@ namespace ninaAPI.WebService.V2
             {
                 State = "Finished";
             }
+
+            Type = container is TrainedDarkFlatExposure ? "darks" : "flats";
 
             if (State.Equals("Running"))
             {
