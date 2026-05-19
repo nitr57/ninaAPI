@@ -59,7 +59,6 @@ namespace ninaAPI.WebService.V2
 
             darks.GetIterations().Iterations = darkCount;
             darks.KeepPanelClosed = keepClosed;
-            darks.UseProfileExposureTime = false;
 
             TakeExposure exposureItem = null;
             SwitchFilter switchFilterItem = null;
@@ -204,8 +203,8 @@ namespace ninaAPI.WebService.V2
 
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed: false);
                                     container = darks;
-                                    darks.Validate(); // skip sub-items that can't run (e.g. no flat panel)
-                                    await darks.Execute(progress, token);
+                                    if (darks.Validate())
+                                        await darks.Execute(progress, token);
                                 }
                             });
                         }
@@ -347,8 +346,8 @@ namespace ninaAPI.WebService.V2
 
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
                                     container = darks;
-                                    darks.Validate(); // skip sub-items that can't run (e.g. no flat panel)
-                                    await darks.Execute(progress, token);
+                                    if (darks.Validate())
+                                        await darks.Execute(progress, token);
                                 }
                             });
                         }
@@ -484,8 +483,8 @@ namespace ninaAPI.WebService.V2
 
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
                                     container = darks;
-                                    darks.Validate(); // skip sub-items that can't run (e.g. no flat panel)
-                                    await darks.Execute(progress, token);
+                                    if (darks.Validate())
+                                        await darks.Execute(progress, token);
                                 }
                             });
                         }
