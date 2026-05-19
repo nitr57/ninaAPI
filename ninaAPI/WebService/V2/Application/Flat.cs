@@ -199,7 +199,10 @@ namespace ninaAPI.WebService.V2
                                         MessageBoxButton.OKCancel,
                                         MessageBoxResult.OK);
                                     if (result != MessageBoxResult.OK || token.IsCancellationRequested)
+                                    {
+                                        Logger.Info("Dark flats process aborted.");
                                         return;
+                                    }
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed: false);
                                     container = darks;
                                     if (darks.Validate())
@@ -341,7 +344,10 @@ namespace ninaAPI.WebService.V2
                                         MessageBoxButton.OKCancel,
                                         MessageBoxResult.OK);
                                     if (result != MessageBoxResult.OK || token.IsCancellationRequested)
+                                    {
+                                        Logger.Info("Dark flats process aborted.");
                                         return;
+                                    }
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
                                     container = darks;
                                     if (darks.Validate())
@@ -477,7 +483,10 @@ namespace ninaAPI.WebService.V2
                                         MessageBoxButton.OKCancel,
                                         MessageBoxResult.OK);
                                     if (result != MessageBoxResult.OK || token.IsCancellationRequested)
+                                    {
+                                        Logger.Info("Dark flats process aborted.");
                                         return;
+                                    }
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
                                     container = darks;
                                     if (darks.Validate())
