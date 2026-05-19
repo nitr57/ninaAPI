@@ -19,7 +19,9 @@ using EmbedIO.WebApi;
 using NINA.Core.Locale;
 using NINA.Core.Model;
 using NINA.Core.Model.Equipment;
+using NINA.Core.SignalR;
 using NINA.Core.Utility;
+using System.Windows;
 using NINA.Profile;
 using NINA.Profile.Interfaces;
 using NINA.Sequencer.Conditions;
@@ -27,7 +29,6 @@ using NINA.Sequencer.Container;
 using NINA.Sequencer.SequenceItem.FlatDevice;
 using NINA.Sequencer.SequenceItem.FilterWheel;
 using NINA.Sequencer.SequenceItem.Imaging;
-using NINA.Sequencer.SequenceItem.Utility;
 using ninaAPI.Utility;
 
 namespace ninaAPI.WebService.V2
@@ -192,11 +193,12 @@ namespace ninaAPI.WebService.V2
                                 await flats.Execute(progress, token);
                                 if (!token.IsCancellationRequested)
                                 {
-                                    var service = AdvancedAPI.Controls.WindowFactory.Create();
-                                    var msgResult = new MessageBoxResult(Loc.Instance["LblCoverScopeMsgBox"]);
-                                    using (token.Register(() => service?.Close()))
-                                        await service.ShowDialog(msgResult, Loc.Instance["LblCoverScopeMsgBoxTitle"]);
-                                    if (!msgResult.Continue || token.IsCancellationRequested)
+                                    var result = await MyMessageBoxBroadcaster.Instance.ShowMessageBoxAsync(
+                                        Loc.Instance["LblCoverScopeMsgBox"],
+                                        Loc.Instance["LblCoverScopeMsgBoxTitle"],
+                                        MessageBoxButton.OKCancel,
+                                        MessageBoxResult.OK);
+                                    if (result != MessageBoxResult.OK || token.IsCancellationRequested)
                                         return;
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed: false);
                                     container = darks;
@@ -333,11 +335,12 @@ namespace ninaAPI.WebService.V2
                                 await flats.Execute(progress, token);
                                 if (!token.IsCancellationRequested)
                                 {
-                                    var service = AdvancedAPI.Controls.WindowFactory.Create();
-                                    var msgResult = new MessageBoxResult(Loc.Instance["LblCoverScopeMsgBox"]);
-                                    using (token.Register(() => service?.Close()))
-                                        await service.ShowDialog(msgResult, Loc.Instance["LblCoverScopeMsgBoxTitle"]);
-                                    if (!msgResult.Continue || token.IsCancellationRequested)
+                                    var result = await MyMessageBoxBroadcaster.Instance.ShowMessageBoxAsync(
+                                        Loc.Instance["LblCoverScopeMsgBox"],
+                                        Loc.Instance["LblCoverScopeMsgBoxTitle"],
+                                        MessageBoxButton.OKCancel,
+                                        MessageBoxResult.OK);
+                                    if (result != MessageBoxResult.OK || token.IsCancellationRequested)
                                         return;
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
                                     container = darks;
@@ -468,11 +471,12 @@ namespace ninaAPI.WebService.V2
                                 await flats.Execute(progress, token);
                                 if (!token.IsCancellationRequested)
                                 {
-                                    var service = AdvancedAPI.Controls.WindowFactory.Create();
-                                    var msgResult = new MessageBoxResult(Loc.Instance["LblCoverScopeMsgBox"]);
-                                    using (token.Register(() => service?.Close()))
-                                        await service.ShowDialog(msgResult, Loc.Instance["LblCoverScopeMsgBoxTitle"]);
-                                    if (!msgResult.Continue || token.IsCancellationRequested)
+                                    var result = await MyMessageBoxBroadcaster.Instance.ShowMessageBoxAsync(
+                                        Loc.Instance["LblCoverScopeMsgBox"],
+                                        Loc.Instance["LblCoverScopeMsgBoxTitle"],
+                                        MessageBoxButton.OKCancel,
+                                        MessageBoxResult.OK);
+                                    if (result != MessageBoxResult.OK || token.IsCancellationRequested)
                                         return;
                                     var darks = BuildDarkFlatsContainer(flats, darkCount, keepClosed);
                                     container = darks;
