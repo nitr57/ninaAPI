@@ -16,12 +16,15 @@ using NINA.Core.Interfaces;
 using NINA.Core.Utility;
 using NINA.Equipment.Equipment;
 using NINA.Equipment.Equipment.MyGuider;
+using NINA.Equipment.Equipment.MyGuider.PHD2;
 using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
+using NINA.WPF.Base.ViewModel.Equipment.Guider;
 using ninaAPI.Utility;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -373,6 +376,189 @@ namespace ninaAPI.WebService.V2
                             response.Response = "Setting updated";
                         }
                     }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/guider/dither")]
+        public async Task GuiderDither()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                IGuiderMediator guider = AdvancedAPI.Controls.Guider;
+
+                if (guider.GetInfo().Connected)
+                {
+                    response.Success = await guider.Dither(CancellationToken.None);
+                    response.Response = "Dither requested";
+                }
+                else
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Guider not connected", 409));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        // The dedicated guide camera for the integrated PHD2 guider (IntegratedGuider). It is a
+        // separate ICamera from the imaging camera, selected here and persisted to the profile;
+        // the guider resolves and connects it on its own Connect.
+        private IDeviceChooserVM GetGuideCameraChooser()
+        {
+            return (GetDeviceVM("guider").Item1 as GuiderChooserVM)?.GuideCameraChooser;
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/guider/integrated/cameras")]
+        public async Task IntegratedGuiderCameras()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                IDeviceChooserVM chooser = GetGuideCameraChooser();
+                if (chooser == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Integrated guider not available", 409));
+                }
+                else
+                {
+                    // Populate on first use (the list holds only the "No camera" dummy until scanned).
+                    if (chooser.Devices == null || chooser.Devices.Count <= 1)
+                    {
+                        await chooser.GetEquipment();
+                    }
+                    response.Response = chooser.Devices;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/guider/integrated/selected-camera")]
+        public void IntegratedGuiderSelectedCamera()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                string id = AdvancedAPI.Controls.Profile.ActiveProfile.GuiderSettings.IntegratedGuideCameraId;
+                response.Response = new Dictionary<string, object> { { "Id", id ?? string.Empty } };
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/guider/integrated/select-camera")]
+        public void IntegratedGuiderSelectCamera([QueryField] string id)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (string.IsNullOrEmpty(id))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Missing camera id", 400));
+                }
+                else
+                {
+                    AdvancedAPI.Controls.Profile.ActiveProfile.GuiderSettings.IntegratedGuideCameraId = id;
+
+                    IDeviceChooserVM chooser = GetGuideCameraChooser();
+                    IDevice device = chooser?.Devices?.FirstOrDefault(d => d.Id == id);
+                    if (device != null)
+                    {
+                        chooser.SelectedDevice = device;
+                    }
+                    response.Response = "Guide camera selected";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/guider/integrated/state")]
+        public void IntegratedGuiderStateInfo()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var device = AdvancedAPI.Controls.Guider.GetDevice() as IntegratedGuider;
+                if (device == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Integrated guider not active", 409));
+                }
+                else
+                {
+                    response.Response = device.GetIntegratedState();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        // Returns the latest guide-camera frame as a base64 image (auto-stretched). The Vue
+        // overlay positions the lock box from the integrated/state coordinates.
+        [Route(HttpVerbs.Get, "/equipment/guider/integrated/image")]
+        public async Task IntegratedGuiderImage([QueryField] int quality, [QueryField] double scale)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var device = AdvancedAPI.Controls.Guider.GetDevice() as IntegratedGuider;
+                var imageData = device?.LastGuideImage;
+                if (imageData == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("No guide image available", 409));
+                }
+                else
+                {
+                    var imageSettings = AdvancedAPI.Controls.Profile.ActiveProfile.ImageSettings;
+                    var rendered = imageData.RenderImage();
+                    rendered = await rendered.Stretch(
+                        imageSettings.AutoStretchFactor,
+                        imageSettings.BlackClipping,
+                        imageSettings.UnlinkedStretch);
+
+                    double s = scale <= 0 ? 1.0 : scale;
+                    int q = quality <= 0 ? 90 : quality;
+                    response.Response = BitmapHelper.ScaleAndConvertBitmap(rendered.Image, s, q);
                 }
             }
             catch (Exception ex)
