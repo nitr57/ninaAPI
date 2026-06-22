@@ -134,16 +134,28 @@ namespace ninaAPI.WebService.V2
                     double AzimuthError = (double)t.GetProperty("AzimuthError").GetValue(message.Content, null);
                     double AltitudeError = (double)t.GetProperty("AltitudeError").GetValue(message.Content, null);
                     double TotalError = (double)t.GetProperty("TotalError").GetValue(message.Content, null);
+                    bool InitialErrorLarge = (bool)t.GetProperty("InitialErrorLarge").GetValue(message.Content, null);
+                    bool InitialErrorHuge = (bool)t.GetProperty("InitialErrorHuge").GetValue(message.Content, null);
+                    bool DeclinationSpreadLarge = (bool)t.GetProperty("DeclinationSpreadLarge").GetValue(message.Content, null);
+                    double DeclinationSpreadArcsec = (double)t.GetProperty("DeclinationSpreadArcsec").GetValue(message.Content, null);
+                    bool NearEastWest = (bool)t.GetProperty("NearEastWest").GetValue(message.Content, null);
+                    double DistanceToEastWest = (double)t.GetProperty("DistanceToEastWest").GetValue(message.Content, null);
 
                     await Send(new HttpResponse()
                     {
                         Type = HttpResponse.TypeSocket,
-                        Response = new Dictionary<string, double>
-                    {
-                        { "AzimuthError", AzimuthError },
-                        { "AltitudeError", AltitudeError },
-                        { "TotalError", TotalError },
-                    }
+                        Response = new
+                        {
+                            AzimuthError,
+                            AltitudeError,
+                            TotalError,
+                            InitialErrorLarge,
+                            InitialErrorHuge,
+                            DeclinationSpreadLarge,
+                            DeclinationSpreadArcsec,
+                            NearEastWest,
+                            DistanceToEastWest,
+                        }
                     });
                 }
                 else if (message.Topic == "PolarAlignmentPlugin_PolarAlignment_Progress")
