@@ -542,6 +542,7 @@ namespace ninaAPI.WebService.V2
                     flats.KeepPanelClosed = HttpContext.IsParameterOmitted(nameof(keepClosed)) ? flats.KeepPanelClosed : keepClosed;
 
                     IProfile profile = AdvancedAPI.Controls.Profile.ActiveProfile;
+                    FilterInfo filter = null;
                     if (!HttpContext.IsParameterOmitted(nameof(filterId)))
                     {
                         if (filterId < 0 || filterId >= profile.FilterWheelSettings.FilterWheelFilters.Count)
@@ -552,7 +553,8 @@ namespace ninaAPI.WebService.V2
                         }
                         else
                         {
-                            flats.GetSwitchFilterItem().Filter = profile.FilterWheelSettings.FilterWheelFilters[filterId];
+                            filter = profile.FilterWheelSettings.FilterWheelFilters[filterId];
+                            flats.GetSwitchFilterItem().Filter = filter;
                         }
                     }
 
@@ -588,7 +590,20 @@ namespace ninaAPI.WebService.V2
                     {
                         container = flats;
                         flatCancellationToken = new CancellationTokenSource();
-                        flatTask = flats.Execute(AdvancedAPI.Controls.StatusMediator.GetStatus(), flatCancellationToken.Token);
+                        var progress = AdvancedAPI.Controls.StatusMediator.GetStatus();
+                        var token = flatCancellationToken.Token;
+                        flatTask = Task.Run(async () =>
+                        {
+                            // TrainedDarkFlatExposure intentionally skips its own SwitchFilter step (it only
+                            // uses the filter for the trained-exposure-time lookup), so without physically
+                            // moving the wheel here first, the FITS header/filename would be tagged with
+                            // whatever filter the wheel was last actually left on.
+                            if (filter != null)
+                            {
+                                await AdvancedAPI.Controls.FilterWheel.ChangeFilter(filter, token, progress);
+                            }
+                            await flats.Execute(progress, token);
+                        });
                         response.Response = "Process started";
                     }
                     else
