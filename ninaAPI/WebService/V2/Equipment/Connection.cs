@@ -163,6 +163,43 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/equipment/{device}/cancel-connect")]
+        public void DeviceCancelConnect(string device)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                var vms = GetDeviceVM(device);
+                object handler = vms.Item2;
+
+                if (handler != null)
+                {
+                    var command = handler.GetType().GetProperty("CancelConnectCommand", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)?.GetValue(handler) as System.Windows.Input.ICommand;
+                    if (command != null && command.CanExecute(null))
+                    {
+                        command.Execute(null);
+                        response.Response = "Cancelled";
+                    }
+                    else
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Nothing to cancel", 400));
+                    }
+                }
+                else
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Invalid equipment", 400));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/{device}/disconnect")]
         public async Task DeviceDisconnect(string device)
         {
