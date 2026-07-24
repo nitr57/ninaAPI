@@ -116,9 +116,21 @@ namespace ninaAPI.WebService.V2
         public async Task Send(HttpResponse payload)
         {
             Logger.Trace("Sending " + payload.Response + " to TPPA WebSocket");
+            string json = JsonConvert.SerializeObject(payload);
             foreach (IWebSocketContext context in ActiveContexts)
             {
-                await SendAsync(context, JsonConvert.SerializeObject(payload));
+                try
+                {
+                    // EmbedIO's SendAsync has no timeout, so a dead/stuck client could otherwise
+                    // block this broadcast indefinitely. Bound each send and keep going so one bad
+                    // client cannot starve the others. The abandoned send for a dead socket is left
+                    // to EmbedIO's KeepAliveInterval (default 30s) to eventually clean up.
+                    await SendAsync(context, json).WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex, "Failed to send message to TPPA WebSocket client");
+                }
             }
         }
 
