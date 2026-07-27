@@ -8060,8 +8060,6 @@ paths:
                     example: "API"
         "400":
           description: Target missing, unknown, or a requested filter has no stack
-        "504":
-          description: The livestack plugin did not answer in time
         "500":
           description: Internal server error, Unknown error
           content:
@@ -8111,8 +8109,6 @@ paths:
                     example: "API"
         "400":
           description: Target missing or no RGB combination exists for it
-        "504":
-          description: The livestack plugin did not answer in time
         "500":
           description: Internal server error, Unknown error
           content:
