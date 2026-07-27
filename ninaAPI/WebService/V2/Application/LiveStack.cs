@@ -10,6 +10,7 @@
 #endregion "copyright"
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -19,6 +20,7 @@ using System.Windows.Media.Imaging;
 using EmbedIO;
 using EmbedIO.Routing;
 using EmbedIO.WebApi;
+using Newtonsoft.Json;
 using NINA.Core.Utility;
 using NINA.Plugin.Interfaces;
 using ninaAPI.Utility;
@@ -65,14 +67,73 @@ namespace ninaAPI.WebService.V2
 
         public BitmapSource GetLast(string filter, string target)
         {
-            return Images.LastOrDefault(x => x.Filter == filter && x.Target == target).Image;
+            return Images.LastOrDefault(x => x.Filter == filter && x.Target == target)?.Image;
         }
+
+        public void Remove(string filter, string target)
+        {
+            Images.RemoveAll(x => x.Filter == filter && x.Target == target);
+        }
+    }
+
+    /// <summary>
+    /// Payloads exchanged with the livestack plugin for the headless RGB combination.
+    /// The plugin sends/receives these as JSON strings in the message content, because both
+    /// plugins cannot share types.
+    /// </summary>
+    public class ColorCombinationRequest
+    {
+        public string Target { get; set; }
+        public string RedFilter { get; set; }
+        public string GreenFilter { get; set; }
+        public string BlueFilter { get; set; }
+    }
+
+    public class ColorCombinationResult
+    {
+        public string Action { get; set; }
+        public bool Success { get; set; }
+        public string Error { get; set; }
+        public string Target { get; set; }
+        public string RedFilter { get; set; }
+        public string GreenFilter { get; set; }
+        public string BlueFilter { get; set; }
+    }
+
+    public class StackTabsTargetEntry
+    {
+        public string Target { get; set; }
+        public List<string> Filters { get; set; } = new List<string>();
+        public bool HasRgb { get; set; }
+        public string SuggestedRed { get; set; }
+        public string SuggestedGreen { get; set; }
+        public string SuggestedBlue { get; set; }
+    }
+
+    public class StackTabsSnapshot
+    {
+        public List<StackTabsTargetEntry> Targets { get; set; } = new List<StackTabsTargetEntry>();
     }
 
     public class LiveStackWatcher : INinaWatcher, ISubscriber
     {
+        public const string TabsBroadcastTopic = "Livestack_LivestackDockable_TabsBroadcast";
+        public const string ColorCombinationResultTopic = "Livestack_LivestackDockable_ColorCombinationResultBroadcast";
+        public const string ListStackTabsTopic = "Livestack_LivestackDockable_ListStackTabs";
+        public const string CreateColorCombinationTopic = "Livestack_LivestackDockable_CreateColorCombination";
+        public const string RemoveColorCombinationTopic = "Livestack_LivestackDockable_RemoveColorCombination";
+
         public static LiveStackHistory LiveStackHistory { get; private set; }
         public static string LivestackStatus { get; private set; } = "stopped";
+
+        /// <summary>
+        /// Last snapshot of the livestack tabs. The plugin broadcasts it whenever its tabs
+        /// change, so this stays usable even when a request times out.
+        /// </summary>
+        public static StackTabsSnapshot StackTabs { get; private set; } = new StackTabsSnapshot();
+
+        private static readonly ConcurrentDictionary<Guid, TaskCompletionSource<StackTabsSnapshot>> tabsWaiters = new();
+        private static readonly ConcurrentDictionary<Guid, TaskCompletionSource<ColorCombinationResult>> resultWaiters = new();
 
         public async Task OnMessageReceived(IMessage message)
         {
@@ -86,8 +147,116 @@ namespace ninaAPI.WebService.V2
                     await OnStatusReceived(message);
                     break;
 
+                case TabsBroadcastTopic:
+                    OnStackTabsReceived(message);
+                    break;
+
+                case ColorCombinationResultTopic:
+                    await OnColorCombinationResultReceived(message);
+                    break;
+
                 default:
                     break;
+            }
+        }
+
+        private static void OnStackTabsReceived(IMessage message)
+        {
+            StackTabsSnapshot snapshot = Deserialize<StackTabsSnapshot>(message.Content);
+            if (snapshot is null)
+                return;
+
+            StackTabs = snapshot;
+            if (message.CorrelationId.HasValue && tabsWaiters.TryGetValue(message.CorrelationId.Value, out var waiter))
+                waiter.TrySetResult(snapshot);
+        }
+
+        private static async Task OnColorCombinationResultReceived(IMessage message)
+        {
+            ColorCombinationResult result = Deserialize<ColorCombinationResult>(message.Content);
+            if (result is null)
+                return;
+
+            if (message.CorrelationId.HasValue && resultWaiters.TryGetValue(message.CorrelationId.Value, out var waiter))
+                waiter.TrySetResult(result);
+
+            if (!result.Success)
+                return;
+
+            if (result.Action == "remove")
+            {
+                // The RGB stack is gone - do not keep serving the stale image
+                LiveStackHistory?.Remove("RGB", result.Target);
+                await WebSocketV2.SendAndAddEvent("STACK-RGB-REMOVED", new Dictionary<string, object>()
+                {
+                    { "Target", result.Target },
+                });
+            }
+            else
+            {
+                await WebSocketV2.SendAndAddEvent("STACK-RGB-CREATED", new Dictionary<string, object>()
+                {
+                    { "Target", result.Target },
+                    { "RedFilter", result.RedFilter },
+                    { "GreenFilter", result.GreenFilter },
+                    { "BlueFilter", result.BlueFilter },
+                });
+            }
+        }
+
+        private static T Deserialize<T>(object content) where T : class
+        {
+            try
+            {
+                if (content is not string json || string.IsNullOrWhiteSpace(json))
+                    return null;
+                return JsonConvert.DeserializeObject<T>(json);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Asks the livestack plugin for its current tabs. Falls back to the cached snapshot
+        /// when the plugin does not answer (e.g. an older livestack version without this topic).
+        /// </summary>
+        public static async Task<StackTabsSnapshot> RequestStackTabs(TimeSpan timeout)
+        {
+            Guid correlation = Guid.NewGuid();
+            var waiter = new TaskCompletionSource<StackTabsSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+            tabsWaiters[correlation] = waiter;
+            try
+            {
+                AdvancedAPI.Controls.MessageBroker.Publish(new LiveStackMessage(correlation, ListStackTabsTopic, string.Empty));
+                Task completed = await Task.WhenAny(waiter.Task, Task.Delay(timeout));
+                return completed == waiter.Task ? waiter.Task.Result : StackTabs;
+            }
+            finally
+            {
+                tabsWaiters.TryRemove(correlation, out _);
+            }
+        }
+
+        /// <summary>
+        /// Sends a color combination command and waits for the plugin to report the outcome.
+        /// </summary>
+        public static async Task<ColorCombinationResult> SendColorCombinationCommand(string topic, ColorCombinationRequest request, TimeSpan timeout)
+        {
+            Guid correlation = Guid.NewGuid();
+            var waiter = new TaskCompletionSource<ColorCombinationResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            resultWaiters[correlation] = waiter;
+            try
+            {
+                AdvancedAPI.Controls.MessageBroker.Publish(new LiveStackMessage(correlation, topic, JsonConvert.SerializeObject(request)));
+                Task completed = await Task.WhenAny(waiter.Task, Task.Delay(timeout));
+                return completed == waiter.Task ? waiter.Task.Result : null;
+            }
+            finally
+            {
+                resultWaiters.TryRemove(correlation, out _);
             }
         }
 
@@ -148,6 +317,8 @@ namespace ninaAPI.WebService.V2
         {
             AdvancedAPI.Controls.MessageBroker.Subscribe("Livestack_LivestackDockable_StatusBroadcast", this);
             AdvancedAPI.Controls.MessageBroker.Subscribe("Livestack_LivestackDockable_StackUpdateBroadcast", this);
+            AdvancedAPI.Controls.MessageBroker.Subscribe(TabsBroadcastTopic, this);
+            AdvancedAPI.Controls.MessageBroker.Subscribe(ColorCombinationResultTopic, this);
             LiveStackHistory = new LiveStackHistory();
         }
 
@@ -155,6 +326,8 @@ namespace ninaAPI.WebService.V2
         {
             AdvancedAPI.Controls.MessageBroker.Unsubscribe("Livestack_LivestackDockable_StackUpdateBroadcast", this);
             AdvancedAPI.Controls.MessageBroker.Unsubscribe("Livestack_LivestackDockable_StatusBroadcast", this);
+            AdvancedAPI.Controls.MessageBroker.Unsubscribe(TabsBroadcastTopic, this);
+            AdvancedAPI.Controls.MessageBroker.Unsubscribe(ColorCombinationResultTopic, this);
             LiveStackHistory.Dispose();
         }
     }
@@ -348,6 +521,112 @@ namespace ninaAPI.WebService.V2
                             response.Response = BitmapHelper.ScaleAndConvertBitmap(image, 1, quality);
                     }
 
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/livestack/rgb/available")]
+        public async Task LiveStackRgbAvailable()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                StackTabsSnapshot snapshot = await LiveStackWatcher.RequestStackTabs(TimeSpan.FromSeconds(2));
+                response.Response = snapshot.Targets;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/livestack/rgb/create")]
+        public async Task LiveStackRgbCreate(
+            [QueryField] string target,
+            [QueryField] string red,
+            [QueryField] string green,
+            [QueryField] string blue)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(target))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Target is required", 400));
+                }
+                else
+                {
+                    ColorCombinationRequest request = new ColorCombinationRequest()
+                    {
+                        Target = target,
+                        RedFilter = red,
+                        GreenFilter = green,
+                        BlueFilter = blue,
+                    };
+
+                    // Rendering the combination can take a while for large stacks
+                    ColorCombinationResult result = await LiveStackWatcher.SendColorCombinationCommand(
+                        LiveStackWatcher.CreateColorCombinationTopic, request, TimeSpan.FromSeconds(60));
+
+                    if (result is null)
+                        response = CoreUtility.CreateErrorTable(new Error("Timed out waiting for the livestack plugin", 504));
+                    else if (!result.Success)
+                        response = CoreUtility.CreateErrorTable(new Error(result.Error, 400));
+                    else
+                        response.Response = new
+                        {
+                            result.Target,
+                            result.RedFilter,
+                            result.GreenFilter,
+                            result.BlueFilter,
+                        };
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/livestack/rgb/delete")]
+        public async Task LiveStackRgbDelete([QueryField] string target)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(target))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Target is required", 400));
+                }
+                else
+                {
+                    ColorCombinationResult result = await LiveStackWatcher.SendColorCombinationCommand(
+                        LiveStackWatcher.RemoveColorCombinationTopic,
+                        new ColorCombinationRequest() { Target = target },
+                        TimeSpan.FromSeconds(30));
+
+                    if (result is null)
+                        response = CoreUtility.CreateErrorTable(new Error("Timed out waiting for the livestack plugin", 504));
+                    else if (!result.Success)
+                        response = CoreUtility.CreateErrorTable(new Error(result.Error, 400));
+                    else
+                        response.Response = new { result.Target };
                 }
             }
             catch (Exception ex)

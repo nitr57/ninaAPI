@@ -7929,6 +7929,197 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnknownError"
 
+  /livestack/rgb/available:
+    get:
+      tags:
+        - Livestack
+      summary: List targets available for RGB combination
+      description: Returns every target the livestack currently holds stacks for, together with the mono filters of that target, whether an RGB combination already exists and a suggested channel mapping. Used to build the RGB combination UI without any knowledge of the livestack internals. Requires a livestack version supporting the headless color combination.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        Target:
+                          type: string
+                          example: M31
+                        Filters:
+                          type: array
+                          items:
+                            type: string
+                          example: ["Red", "Green", "Blue"]
+                        HasRgb:
+                          type: boolean
+                          description: True when a color combination already exists for this target
+                          example: false
+                        SuggestedRed:
+                          type: string
+                          example: Red
+                        SuggestedGreen:
+                          type: string
+                          example: Green
+                        SuggestedBlue:
+                          type: string
+                          example: Blue
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /livestack/rgb/create:
+    get:
+      tags:
+        - Livestack
+      summary: Create an RGB combination
+      description: Combines three mono stacks of a target into an RGB stack. The result becomes available as filter "RGB" through the regular livestack image endpoints. Omitted channels are filled in with the plugin's own filter name heuristic. If a combination already exists for the target it is replaced, so the call is idempotent. This is the headless equivalent of the "Color Combination Wizard" and the only way to create an RGB stack on PINS.
+      parameters:
+        - in: query
+          name: target
+          required: true
+          description: The target to combine
+          schema:
+            type: string
+            example: M31
+        - in: query
+          name: red
+          required: false
+          description: Filter to use for the red channel. Defaults to the plugin's suggestion.
+          schema:
+            type: string
+            example: Red
+        - in: query
+          name: green
+          required: false
+          description: Filter to use for the green channel. Defaults to the plugin's suggestion.
+          schema:
+            type: string
+            example: Green
+        - in: query
+          name: blue
+          required: false
+          description: Filter to use for the blue channel. Defaults to the plugin's suggestion.
+          schema:
+            type: string
+            example: Blue
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: object
+                    properties:
+                      Target:
+                        type: string
+                        example: M31
+                      RedFilter:
+                        type: string
+                        example: Red
+                      GreenFilter:
+                        type: string
+                        example: Green
+                      BlueFilter:
+                        type: string
+                        example: Blue
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "400":
+          description: Target missing, unknown, or a requested filter has no stack
+        "504":
+          description: The livestack plugin did not answer in time
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /livestack/rgb/delete:
+    get:
+      tags:
+        - Livestack
+      summary: Delete an RGB combination
+      description: Removes the RGB combination of a target. The mono stacks of that target are kept. The cached RGB image is dropped, so the image endpoints report it as unavailable afterwards.
+      parameters:
+        - in: query
+          name: target
+          required: true
+          description: The target whose RGB combination should be removed
+          schema:
+            type: string
+            example: M31
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: object
+                    properties:
+                      Target:
+                        type: string
+                        example: M31
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "400":
+          description: Target missing or no RGB combination exists for it
+        "504":
+          description: The livestack plugin did not answer in time
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
   /flats/skyflat:
     get:
       tags:
