@@ -190,8 +190,10 @@ namespace ninaAPI.WebService.V2
                         { "StackCount", stackCount },
                     });
 
-                    // A channel of this target grew - keep its colour combination current
-                    await RefreshColorCombination(target);
+                    // A channel of this target grew - keep its colour combination current.
+                    // Detached on purpose: rendering three channels takes a while and waits for
+                    // the stacker to release the tabs, which must not hold up message delivery.
+                    _ = Task.Run(() => RefreshColorCombination(target));
                 }
                 else
                 {

@@ -312,7 +312,7 @@ namespace ninaAPI.WebService.V2
 
         /// <summary>
         /// Re-renders the existing colour combination of a target. Returns null when there is
-        /// none, or when a channel of that target is currently being written to by the stacker.
+        /// none, or when the stacker did not release the channels within the timeout.
         /// </summary>
         public static async Task<ColorCombinationInfo> RefreshColorCombination(string target)
         {
@@ -321,17 +321,39 @@ namespace ninaAPI.WebService.V2
             if (colorTab is null)
                 return null;
 
-            // Do not read half-written stacks - the next frame will trigger us again anyway
+            // The stacker holds Locked for the whole of StackItem - including the moment it
+            // broadcasts the channel update that brought us here. So we must wait for it to
+            // finish rather than skip, otherwise every single refresh would be dropped.
+            // Same approach the plugin uses itself in RefreshSelectedTabAsync.
+            if (!await WaitUntilUnlocked(tabs, target, TimeSpan.FromSeconds(60)))
+                return null; // still busy - the next frame triggers us again anyway
+
+            await RefreshTab(colorTab);
+            return Describe(colorTab, null, null, null);
+        }
+
+        private static async Task<bool> WaitUntilUnlocked(IList tabs, string target, TimeSpan timeout)
+        {
+            DateTime deadline = DateTime.UtcNow + timeout;
+            while (DateTime.UtcNow < deadline)
+            {
+                if (!IsAnyTabLocked(tabs, target))
+                    return true;
+                await Task.Delay(25);
+            }
+            return !IsAnyTabLocked(tabs, target);
+        }
+
+        private static bool IsAnyTabLocked(IList tabs, string target)
+        {
             foreach (object tab in tabs)
             {
                 if (tab is null || !string.Equals(ReadString(tab, "Target"), target, StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (tab.GetType().GetProperty("Locked")?.GetValue(tab) as bool? == true)
-                    return null;
+                    return true;
             }
-
-            await RefreshTab(colorTab);
-            return Describe(colorTab, null, null, null);
+            return false;
         }
     }
 }
