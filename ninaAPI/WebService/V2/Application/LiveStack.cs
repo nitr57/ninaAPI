@@ -41,6 +41,10 @@ namespace ninaAPI.WebService.V2
 
     public class LiveStackHistory : IDisposable
     {
+        // Written from the detached colour refresh task while HTTP handlers read - every access
+        // to the list goes through this lock
+        private readonly object gate = new object();
+
         public List<LiveStackResponse> Images { get; set; } = new List<LiveStackResponse>();
 
         public void AddMono(string filter, int stackCount, string target, BitmapSource image)
@@ -55,24 +59,50 @@ namespace ninaAPI.WebService.V2
 
         public void Add(LiveStackResponse image)
         {
-            Images.RemoveAll(x => x.Filter == image.Filter && x.Target == image.Target); // Only keep the last stacked image for each filter and target
-            Images.Add(image);
+            lock (gate)
+            {
+                Images.RemoveAll(x => x.Filter == image.Filter && x.Target == image.Target); // Only keep the last stacked image for each filter and target
+                Images.Add(image);
+            }
         }
 
         public void Dispose()
         {
-            Images.Clear();
-            Images = null;
+            lock (gate)
+            {
+                Images.Clear();
+                Images = null;
+            }
         }
 
         public BitmapSource GetLast(string filter, string target)
         {
-            return Images.LastOrDefault(x => x.Filter == filter && x.Target == target)?.Image;
+            return Find(filter, target)?.Image;
+        }
+
+        public LiveStackResponse Find(string filter, string target)
+        {
+            lock (gate)
+            {
+                return Images?.LastOrDefault(x => x.Filter == filter && x.Target == target);
+            }
+        }
+
+        /// <summary>Copy for callers that need to enumerate, so they cannot see a torn list.</summary>
+        public List<LiveStackResponse> Snapshot()
+        {
+            lock (gate)
+            {
+                return Images is null ? new List<LiveStackResponse>() : new List<LiveStackResponse>(Images);
+            }
         }
 
         public void Remove(string filter, string target)
         {
-            Images.RemoveAll(x => x.Filter == filter && x.Target == target);
+            lock (gate)
+            {
+                Images?.RemoveAll(x => x.Filter == filter && x.Target == target);
+            }
         }
     }
 
@@ -119,6 +149,12 @@ namespace ninaAPI.WebService.V2
         private static async Task RefreshColorCombination(string target)
         {
             if (string.IsNullOrWhiteSpace(target) || !LivestackBridge.IsAvailable)
+                return;
+
+            // With SaveStackedLights on, the plugin refreshes and broadcasts the colour tab on
+            // every frame itself - its Color broadcast already reaches our history. Rendering a
+            // second time here would duplicate the work and race on the shared tab.
+            if (LivestackBridge.PluginRefreshesColorTabItself())
                 return;
 
             SemaphoreSlim gate = rgbRefreshLocks.GetOrAdd(target, _ => new SemaphoreSlim(1, 1));
@@ -214,6 +250,7 @@ namespace ninaAPI.WebService.V2
         public static void ResetHistory()
         {
             LiveStackHistory = new LiveStackHistory();
+            rgbRefreshLocks.Clear();
         }
 
         public void StartWatchers()
@@ -221,6 +258,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.MessageBroker.Subscribe("Livestack_LivestackDockable_StatusBroadcast", this);
             AdvancedAPI.Controls.MessageBroker.Subscribe("Livestack_LivestackDockable_StackUpdateBroadcast", this);
             LiveStackHistory = new LiveStackHistory();
+            rgbRefreshLocks.Clear();
         }
 
         public void StopWatchers()
@@ -228,6 +266,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.MessageBroker.Unsubscribe("Livestack_LivestackDockable_StackUpdateBroadcast", this);
             AdvancedAPI.Controls.MessageBroker.Unsubscribe("Livestack_LivestackDockable_StatusBroadcast", this);
             LiveStackHistory.Dispose();
+            rgbRefreshLocks.Clear();
         }
     }
 
@@ -335,7 +374,7 @@ namespace ninaAPI.WebService.V2
 
             try
             {
-                foreach (var image in LiveStackWatcher.LiveStackHistory.Images)
+                foreach (var image in LiveStackWatcher.LiveStackHistory.Snapshot())
                 {
                     images.Add(new { image.Filter, image.Target });
                 }
@@ -462,6 +501,11 @@ namespace ninaAPI.WebService.V2
                     response.Response = targets;
                 }
             }
+            catch (InvalidOperationException ex)
+            {
+                // Expected, actionable failures (dockable not created yet, ...)
+                response = CoreUtility.CreateErrorTable(new Error(ex.Message, 400));
+            }
             catch (Exception ex)
             {
                 Logger.Error(ex);
@@ -575,6 +619,10 @@ namespace ninaAPI.WebService.V2
                     response.Response = new { Target = target };
                 }
             }
+            catch (InvalidOperationException ex)
+            {
+                response = CoreUtility.CreateErrorTable(new Error(ex.Message, 400));
+            }
             catch (Exception ex)
             {
                 Logger.Error(ex);
@@ -591,7 +639,7 @@ namespace ninaAPI.WebService.V2
 
             try
             {
-                LiveStackResponse l = LiveStackWatcher.LiveStackHistory.Images.Where(x => x.Filter == filter && x.Target == target).LastOrDefault();
+                LiveStackResponse l = LiveStackWatcher.LiveStackHistory.Find(filter, target);
                 if (l is null)
                 {
                     response = CoreUtility.CreateErrorTable(new Error("No image with specified filter and target found", 404));

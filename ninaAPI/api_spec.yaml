@@ -7981,6 +7981,8 @@ paths:
                   Type:
                     type: string
                     example: "API"
+        "400":
+          description: The livestack plugin is unavailable or incompatible
         "500":
           description: Internal server error, Unknown error
           content:

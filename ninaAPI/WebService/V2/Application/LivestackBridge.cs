@@ -18,6 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using NINA.Core.Utility;
+using NINA.Profile.Interfaces;
 
 namespace ninaAPI.WebService.V2
 {
@@ -43,6 +44,11 @@ namespace ninaAPI.WebService.V2
     {
         public const string RgbFilter = "RGB";
 
+        // Filter names the plugin gives the three channels it extracts from a bayered frame
+        // (LiveStackBag.RED_OSC / GREEN_OSC / BLUE_OSC). Those channels come out of the same
+        // debayered image and are therefore already aligned to each other.
+        private static readonly string[] OscFilters = { "R_OSC", "G_OSC", "B_OSC" };
+
         private const string MediatorTypeName = "NINA.Plugin.Livestack.LivestackMediator";
         private const string ColorCombinationTabTypeName = "NINA.Plugin.Livestack.LivestackDockables.ColorCombinationTab";
         private const string LiveStackTabTypeName = "NINA.Plugin.Livestack.LivestackDockables.LiveStackTab";
@@ -54,7 +60,6 @@ namespace ninaAPI.WebService.V2
         private static Type colorCombinationTabType;
         private static Type liveStackTabType;
         private static ConstructorInfo colorCombinationTabCtor;
-        private static string unavailableReason;
 
         /// <summary>
         /// Remembers the livestack assembly from a broadcast we received from it. This is the
@@ -100,7 +105,7 @@ namespace ninaAPI.WebService.V2
 
                     if (livestackAssembly is null)
                     {
-                        reason = unavailableReason = "The livestack plugin is not loaded";
+                        reason = "The livestack plugin is not loaded";
                         return false;
                     }
 
@@ -110,7 +115,7 @@ namespace ninaAPI.WebService.V2
 
                     if (mediatorType is null || colorCombinationTabType is null || liveStackTabType is null)
                     {
-                        reason = unavailableReason = "The installed livestack version does not expose the expected types";
+                        reason = "The installed livestack version does not expose the expected types";
                         return false;
                     }
 
@@ -121,7 +126,7 @@ namespace ninaAPI.WebService.V2
                         {
                             var p = c.GetParameters();
                             return p.Length == 5
-                                && p[0].ParameterType.IsInstanceOfType(AdvancedAPI.Controls.Profile)
+                                && typeof(IProfileService).IsAssignableFrom(p[0].ParameterType)
                                 && p[1].ParameterType == liveStackTabType
                                 && p[2].ParameterType == liveStackTabType
                                 && p[3].ParameterType == liveStackTabType
@@ -130,18 +135,18 @@ namespace ninaAPI.WebService.V2
 
                     if (colorCombinationTabCtor is null)
                     {
-                        reason = unavailableReason = "The installed livestack version has an incompatible ColorCombinationTab constructor "
+                        reason = "The installed livestack version has an incompatible ColorCombinationTab constructor "
                             + "(expected ColorCombinationTab(IProfileService, LiveStackTab, LiveStackTab, LiveStackTab, bool))";
                         return false;
                     }
 
-                    reason = unavailableReason = null;
+                    reason = null;
                     return true;
                 }
                 catch (Exception ex)
                 {
                     Logger.Error(ex);
-                    reason = unavailableReason = $"Could not access the livestack plugin: {ex.Message}";
+                    reason = $"Could not access the livestack plugin: {ex.Message}";
                     return false;
                 }
             }
@@ -155,6 +160,50 @@ namespace ninaAPI.WebService.V2
 
             return dockable.GetType().GetProperty("Tabs")?.GetValue(dockable) as IList
                 ?? throw new InvalidOperationException("The livestack dockable does not expose its tabs");
+        }
+
+        /// <summary>
+        /// Tabs is an AsyncObservableCollection without any thread safety, and the stacker adds
+        /// to it from its worker. Never enumerate it directly - take a copy. The tab objects are
+        /// the same instances, so state such as Locked is still read live off them.
+        /// </summary>
+        private static List<object> SnapshotTabs(IList tabs)
+        {
+            while (true)
+            {
+                try
+                {
+                    var snapshot = new List<object>(tabs.Count);
+                    foreach (object tab in tabs)
+                        snapshot.Add(tab);
+                    return snapshot;
+                }
+                catch (InvalidOperationException)
+                {
+                    // "Collection was modified" - the stacker added a tab while we copied, retry
+                }
+            }
+        }
+
+        private static List<object> SnapshotTabs() => SnapshotTabs(GetTabs());
+
+        /// <summary>
+        /// True when the plugin saves stacked lights, in which case it refreshes and broadcasts
+        /// the colour tab on every frame all by itself (ShouldRefreshColorTab). The API must not
+        /// render a second time then - ColorCombinationTab.Refresh has no reentrancy guard.
+        /// </summary>
+        public static bool PluginRefreshesColorTabItself()
+        {
+            try
+            {
+                object plugin = mediatorType?.GetProperty("Plugin", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+                return plugin?.GetType().GetProperty("SaveStackedLights")?.GetValue(plugin) as bool? ?? false;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                return false;
+            }
         }
 
         private static string ReadString(object tab, string property) => tab.GetType().GetProperty(property)?.GetValue(tab)?.ToString();
@@ -172,7 +221,7 @@ namespace ninaAPI.WebService.V2
         public static IReadOnlyList<TabInfo> ListTabs()
         {
             var result = new List<TabInfo>();
-            foreach (object tab in GetTabs())
+            foreach (object tab in SnapshotTabs())
             {
                 if (tab is null)
                     continue;
@@ -200,7 +249,7 @@ namespace ninaAPI.WebService.V2
             public BitmapSource Image { get; init; }
         }
 
-        private static object FindChannelTab(IList tabs, string target, string filter)
+        private static object FindChannelTab(IEnumerable tabs, string target, string filter)
         {
             if (string.IsNullOrWhiteSpace(filter))
                 return null;
@@ -216,7 +265,7 @@ namespace ninaAPI.WebService.V2
             return null;
         }
 
-        private static object FindColorTab(IList tabs, string target)
+        private static object FindColorTab(IEnumerable tabs, string target)
         {
             foreach (object tab in tabs)
             {
@@ -259,10 +308,11 @@ namespace ninaAPI.WebService.V2
         public static async Task<ColorCombinationInfo> CreateColorCombination(string target, string red, string green, string blue)
         {
             IList tabs = GetTabs();
+            List<object> snapshot = SnapshotTabs(tabs);
 
-            object redTab = FindChannelTab(tabs, target, red);
-            object greenTab = FindChannelTab(tabs, target, green);
-            object blueTab = FindChannelTab(tabs, target, blue);
+            object redTab = FindChannelTab(snapshot, target, red);
+            object greenTab = FindChannelTab(snapshot, target, green);
+            object blueTab = FindChannelTab(snapshot, target, blue);
 
             if (redTab is null || greenTab is null || blueTab is null)
             {
@@ -273,14 +323,17 @@ namespace ninaAPI.WebService.V2
                 throw new InvalidOperationException($"No stack found for {string.Join(", ", missing)} on target \"{target}\"");
             }
 
-            // Create or replace, so calling this twice is not an error for API clients
-            object existing = FindColorTab(tabs, target);
-            if (existing is not null)
-                tabs.Remove(existing);
+            // OSC channels are extracted from one debayered frame and are already registered to
+            // each other. Re-running star alignment across them would misalign a correct stack.
+            bool channelsAlreadyAligned = IsOscFilter(red) && IsOscFilter(green) && IsOscFilter(blue);
+
+            // Do not read a stack the stacker is currently writing to
+            if (!await WaitUntilUnlocked(snapshot, target, TimeSpan.FromSeconds(60)))
+                throw new InvalidOperationException("The stacker is busy with this target - try again in a moment");
 
             object colorTab = colorCombinationTabCtor.Invoke(new object[]
             {
-                AdvancedAPI.Controls.Profile, redTab, greenTab, blueTab, false
+                AdvancedAPI.Controls.Profile, redTab, greenTab, blueTab, channelsAlreadyAligned
             });
 
             await RefreshTab(colorTab);
@@ -289,25 +342,29 @@ namespace ninaAPI.WebService.V2
             if (info.Image is null)
                 throw new InvalidOperationException("The colour combination could not be rendered - check the NINA log for details");
 
-            // Only publish a tab that actually rendered
+            // Swap only once the new tab is known good, so a failed render never leaves the
+            // target without the combination it had before
+            object existing = FindColorTab(SnapshotTabs(tabs), target);
+            if (existing is not null)
+                tabs.Remove(existing);
             tabs.Add(colorTab);
             return info;
+        }
+
+        private static bool IsOscFilter(string filter)
+        {
+            return OscFilters.Any(x => string.Equals(x, filter, StringComparison.OrdinalIgnoreCase));
         }
 
         public static bool RemoveColorCombination(string target)
         {
             IList tabs = GetTabs();
-            object colorTab = FindColorTab(tabs, target);
+            object colorTab = FindColorTab(SnapshotTabs(tabs), target);
             if (colorTab is null)
                 return false;
 
             tabs.Remove(colorTab);
             return true;
-        }
-
-        public static bool HasColorCombination(string target)
-        {
-            return FindColorTab(GetTabs(), target) is not null;
         }
 
         /// <summary>
@@ -316,8 +373,8 @@ namespace ninaAPI.WebService.V2
         /// </summary>
         public static async Task<ColorCombinationInfo> RefreshColorCombination(string target)
         {
-            IList tabs = GetTabs();
-            object colorTab = FindColorTab(tabs, target);
+            List<object> snapshot = SnapshotTabs();
+            object colorTab = FindColorTab(snapshot, target);
             if (colorTab is null)
                 return null;
 
@@ -325,14 +382,14 @@ namespace ninaAPI.WebService.V2
             // broadcasts the channel update that brought us here. So we must wait for it to
             // finish rather than skip, otherwise every single refresh would be dropped.
             // Same approach the plugin uses itself in RefreshSelectedTabAsync.
-            if (!await WaitUntilUnlocked(tabs, target, TimeSpan.FromSeconds(60)))
+            if (!await WaitUntilUnlocked(snapshot, target, TimeSpan.FromSeconds(60)))
                 return null; // still busy - the next frame triggers us again anyway
 
             await RefreshTab(colorTab);
             return Describe(colorTab, null, null, null);
         }
 
-        private static async Task<bool> WaitUntilUnlocked(IList tabs, string target, TimeSpan timeout)
+        private static async Task<bool> WaitUntilUnlocked(IEnumerable tabs, string target, TimeSpan timeout)
         {
             DateTime deadline = DateTime.UtcNow + timeout;
             while (DateTime.UtcNow < deadline)
@@ -344,7 +401,7 @@ namespace ninaAPI.WebService.V2
             return !IsAnyTabLocked(tabs, target);
         }
 
-        private static bool IsAnyTabLocked(IList tabs, string target)
+        private static bool IsAnyTabLocked(IEnumerable tabs, string target)
         {
             foreach (object tab in tabs)
             {
