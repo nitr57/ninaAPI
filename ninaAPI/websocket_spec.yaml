@@ -371,6 +371,120 @@ channels:
                   type: string
                   example: "Socket"
           - contentType: application/json
+            title: Live stack colour combination updated
+            payload:
+              type: object
+              properties:
+                Response:
+                  type: object
+                  description: >
+                    Colour variant of STACK-UPDATED. Carries the three channel counts instead of
+                    StackCount. Emitted by the livestack plugin, and - for stacks combined through
+                    /livestack/rgb/create - by the API itself after each channel update.
+                  properties:
+                    Event:
+                      type: string
+                      example: STACK-UPDATED
+                    Filter:
+                      type: string
+                      example: RGB
+                    Target:
+                      type: string
+                      example: M31
+                    IsMonochrome:
+                      type: boolean
+                      example: false
+                    RedStackCount:
+                      type: integer
+                      example: 10
+                    GreenStackCount:
+                      type: integer
+                      example: 10
+                    BlueStackCount:
+                      type: integer
+                      example: 10
+                  required:
+                    - Event
+                    - Filter
+                    - Target
+                    - IsMonochrome
+                Error:
+                  type: string
+                StatusCode:
+                  type: integer
+                  example: 200
+                Success:
+                  type: boolean
+                  example: true
+                Type:
+                  type: string
+                  example: "Socket"
+          - contentType: application/json
+            title: Live stack RGB combination created
+            payload:
+              type: object
+              properties:
+                Response:
+                  type: object
+                  properties:
+                    Event:
+                      type: string
+                      example: STACK-RGB-CREATED
+                    Target:
+                      type: string
+                      example: M31
+                    RedFilter:
+                      type: string
+                      example: Red
+                    GreenFilter:
+                      type: string
+                      example: Green
+                    BlueFilter:
+                      type: string
+                      example: Blue
+                  required:
+                    - Event
+                    - Target
+                Error:
+                  type: string
+                StatusCode:
+                  type: integer
+                  example: 200
+                Success:
+                  type: boolean
+                  example: true
+                Type:
+                  type: string
+                  example: "Socket"
+          - contentType: application/json
+            title: Live stack RGB combination removed
+            payload:
+              type: object
+              properties:
+                Response:
+                  type: object
+                  properties:
+                    Event:
+                      type: string
+                      example: STACK-RGB-REMOVED
+                    Target:
+                      type: string
+                      example: M31
+                  required:
+                    - Event
+                    - Target
+                Error:
+                  type: string
+                StatusCode:
+                  type: integer
+                  example: 200
+                Success:
+                  type: boolean
+                  example: true
+                Type:
+                  type: string
+                  example: "Socket"
+          - contentType: application/json
             title: TS Wait Start Event
             payload:
               type: object

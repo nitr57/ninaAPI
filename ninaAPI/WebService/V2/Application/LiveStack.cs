@@ -10,10 +10,12 @@
 #endregion "copyright"
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 using EmbedIO;
@@ -39,6 +41,10 @@ namespace ninaAPI.WebService.V2
 
     public class LiveStackHistory : IDisposable
     {
+        // Written from the detached colour refresh task while HTTP handlers read - every access
+        // to the list goes through this lock
+        private readonly object gate = new object();
+
         public List<LiveStackResponse> Images { get; set; } = new List<LiveStackResponse>();
 
         public void AddMono(string filter, int stackCount, string target, BitmapSource image)
@@ -53,26 +59,70 @@ namespace ninaAPI.WebService.V2
 
         public void Add(LiveStackResponse image)
         {
-            Images.RemoveAll(x => x.Filter == image.Filter && x.Target == image.Target); // Only keep the last stacked image for each filter and target
-            Images.Add(image);
+            lock (gate)
+            {
+                Images.RemoveAll(x => x.Filter == image.Filter && x.Target == image.Target); // Only keep the last stacked image for each filter and target
+                Images.Add(image);
+            }
         }
 
         public void Dispose()
         {
-            Images.Clear();
-            Images = null;
+            lock (gate)
+            {
+                Images.Clear();
+                Images = null;
+            }
         }
 
         public BitmapSource GetLast(string filter, string target)
         {
-            return Images.LastOrDefault(x => x.Filter == filter && x.Target == target).Image;
+            return Find(filter, target)?.Image;
         }
+
+        public LiveStackResponse Find(string filter, string target)
+        {
+            lock (gate)
+            {
+                return Images?.LastOrDefault(x => x.Filter == filter && x.Target == target);
+            }
+        }
+
+        /// <summary>Copy for callers that need to enumerate, so they cannot see a torn list.</summary>
+        public List<LiveStackResponse> Snapshot()
+        {
+            lock (gate)
+            {
+                return Images is null ? new List<LiveStackResponse>() : new List<LiveStackResponse>(Images);
+            }
+        }
+
+        public void Remove(string filter, string target)
+        {
+            lock (gate)
+            {
+                Images?.RemoveAll(x => x.Filter == filter && x.Target == target);
+            }
+        }
+    }
+
+    public class StackTabsTargetEntry
+    {
+        public string Target { get; set; }
+        public List<string> Filters { get; set; } = new List<string>();
+        public bool HasRgb { get; set; }
+        public string SuggestedRed { get; set; }
+        public string SuggestedGreen { get; set; }
+        public string SuggestedBlue { get; set; }
     }
 
     public class LiveStackWatcher : INinaWatcher, ISubscriber
     {
         public static LiveStackHistory LiveStackHistory { get; private set; }
         public static string LivestackStatus { get; private set; } = "stopped";
+
+        // One refresh at a time per target, so a burst of channel updates cannot pile up
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> rgbRefreshLocks = new(StringComparer.OrdinalIgnoreCase);
 
         public async Task OnMessageReceived(IMessage message)
         {
@@ -91,6 +141,55 @@ namespace ninaAPI.WebService.V2
             }
         }
 
+        /// <summary>
+        /// Re-renders the colour combination of a target after one of its channels was stacked.
+        /// The livestack plugin only refreshes its colour tab when it is selected in the UI,
+        /// which never happens headless - so the API drives it instead of patching the plugin.
+        /// </summary>
+        private static async Task RefreshColorCombination(string target)
+        {
+            if (string.IsNullOrWhiteSpace(target) || !LivestackBridge.IsAvailable)
+                return;
+
+            // With SaveStackedLights on, the plugin refreshes and broadcasts the colour tab on
+            // every frame itself - its Color broadcast already reaches our history. Rendering a
+            // second time here would duplicate the work and race on the shared tab.
+            if (LivestackBridge.PluginRefreshesColorTabItself())
+                return;
+
+            SemaphoreSlim gate = rgbRefreshLocks.GetOrAdd(target, _ => new SemaphoreSlim(1, 1));
+            if (!await gate.WaitAsync(0))
+                return; // a refresh for this target is already running - it will pick up the new data
+
+            try
+            {
+                LivestackBridge.ColorCombinationInfo info = await LivestackBridge.RefreshColorCombination(target);
+                if (info?.Image is null)
+                    return;
+
+                LiveStackHistory?.AddColor(info.RedStackCount, info.GreenStackCount, info.BlueStackCount,
+                    LivestackBridge.RgbFilter, target, info.Image);
+
+                await WebSocketV2.SendAndAddEvent("STACK-UPDATED", new Dictionary<string, object>()
+                {
+                    { "Filter", LivestackBridge.RgbFilter },
+                    { "Target", target },
+                    { "IsMonochrome", false },
+                    { "RedStackCount", info.RedStackCount },
+                    { "GreenStackCount", info.GreenStackCount },
+                    { "BlueStackCount", info.BlueStackCount },
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
         public async Task OnStatusReceived(IMessage message)
         {
             LivestackStatus = message.Content.ToString();
@@ -102,6 +201,10 @@ namespace ninaAPI.WebService.V2
 
          public async Task OnStackUpdateReceived(IMessage message)
         {
+            // The content object is created by the livestack plugin, so it is our handle on
+            // that assembly for the colour combination (see LivestackBridge)
+            LivestackBridge.LearnAssemblyFrom(message.Content);
+
             string filter = message.Content.GetType().GetProperty("Filter").GetValue(message.Content).ToString();
             string target = message.Content.GetType().GetProperty("Target").GetValue(message.Content).ToString();
             bool isMono = (bool)message.Content.GetType().GetProperty("IsMonochrome").GetValue(message.Content);
@@ -122,6 +225,11 @@ namespace ninaAPI.WebService.V2
                         { "IsMonochrome", isMono },
                         { "StackCount", stackCount },
                     });
+
+                    // A channel of this target grew - keep its colour combination current.
+                    // Detached on purpose: rendering three channels takes a while and waits for
+                    // the stacker to release the tabs, which must not hold up message delivery.
+                    _ = Task.Run(() => RefreshColorCombination(target));
                 }
                 else
                 {
@@ -142,6 +250,7 @@ namespace ninaAPI.WebService.V2
         public static void ResetHistory()
         {
             LiveStackHistory = new LiveStackHistory();
+            rgbRefreshLocks.Clear();
         }
 
         public void StartWatchers()
@@ -149,6 +258,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.MessageBroker.Subscribe("Livestack_LivestackDockable_StatusBroadcast", this);
             AdvancedAPI.Controls.MessageBroker.Subscribe("Livestack_LivestackDockable_StackUpdateBroadcast", this);
             LiveStackHistory = new LiveStackHistory();
+            rgbRefreshLocks.Clear();
         }
 
         public void StopWatchers()
@@ -156,6 +266,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.MessageBroker.Unsubscribe("Livestack_LivestackDockable_StackUpdateBroadcast", this);
             AdvancedAPI.Controls.MessageBroker.Unsubscribe("Livestack_LivestackDockable_StatusBroadcast", this);
             LiveStackHistory.Dispose();
+            rgbRefreshLocks.Clear();
         }
     }
 
@@ -263,7 +374,7 @@ namespace ninaAPI.WebService.V2
 
             try
             {
-                foreach (var image in LiveStackWatcher.LiveStackHistory.Images)
+                foreach (var image in LiveStackWatcher.LiveStackHistory.Snapshot())
                 {
                     images.Add(new { image.Filter, image.Target });
                 }
@@ -359,6 +470,168 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        [Route(HttpVerbs.Get, "/livestack/rgb/available")]
+        public void LiveStackRgbAvailable()
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (!LivestackBridge.IsAvailable)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error(LivestackBridge.UnavailableReason, 400));
+                }
+                else
+                {
+                    List<StackTabsTargetEntry> targets = new List<StackTabsTargetEntry>();
+                    foreach (var group in LivestackBridge.ListTabs().GroupBy(x => x.Target))
+                    {
+                        List<string> filters = group.Where(x => !x.IsColorCombination).Select(x => x.Filter).ToList();
+                        var suggestion = ColorCombinationDefaults.Suggest(filters);
+                        targets.Add(new StackTabsTargetEntry()
+                        {
+                            Target = group.Key,
+                            Filters = filters,
+                            HasRgb = group.Any(x => x.IsColorCombination),
+                            SuggestedRed = suggestion.Red,
+                            SuggestedGreen = suggestion.Green,
+                            SuggestedBlue = suggestion.Blue,
+                        });
+                    }
+                    response.Response = targets;
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Expected, actionable failures (dockable not created yet, ...)
+                response = CoreUtility.CreateErrorTable(new Error(ex.Message, 400));
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/livestack/rgb/create")]
+        public async Task LiveStackRgbCreate(
+            [QueryField] string target,
+            [QueryField] string red,
+            [QueryField] string green,
+            [QueryField] string blue)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(target))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Target is required", 400));
+                }
+                else if (!LivestackBridge.IsAvailable)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error(LivestackBridge.UnavailableReason, 400));
+                }
+                else
+                {
+                    // Fill in any omitted channel with the same heuristic the plugin's wizard uses
+                    List<string> filters = LivestackBridge.ListTabs()
+                        .Where(x => !x.IsColorCombination && string.Equals(x.Target, target, StringComparison.OrdinalIgnoreCase))
+                        .Select(x => x.Filter).ToList();
+
+                    if (filters.Count == 0)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error($"No stacks found for target \"{target}\"", 400));
+                    }
+                    else
+                    {
+                        var suggestion = ColorCombinationDefaults.Suggest(filters);
+                        red = string.IsNullOrWhiteSpace(red) ? suggestion.Red : red;
+                        green = string.IsNullOrWhiteSpace(green) ? suggestion.Green : green;
+                        blue = string.IsNullOrWhiteSpace(blue) ? suggestion.Blue : blue;
+
+                        LivestackBridge.ColorCombinationInfo info = await LivestackBridge.CreateColorCombination(target, red, green, blue);
+
+                        LiveStackWatcher.LiveStackHistory?.AddColor(info.RedStackCount, info.GreenStackCount, info.BlueStackCount,
+                            LivestackBridge.RgbFilter, info.Target, info.Image);
+
+                        await WebSocketV2.SendAndAddEvent("STACK-RGB-CREATED", new Dictionary<string, object>()
+                        {
+                            { "Target", info.Target },
+                            { "RedFilter", info.RedFilter },
+                            { "GreenFilter", info.GreenFilter },
+                            { "BlueFilter", info.BlueFilter },
+                        });
+
+                        response.Response = new
+                        {
+                            info.Target,
+                            info.RedFilter,
+                            info.GreenFilter,
+                            info.BlueFilter,
+                        };
+                    }
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Expected, actionable failures (unknown filter, nothing rendered, ...)
+                response = CoreUtility.CreateErrorTable(new Error(ex.Message, 400));
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/livestack/rgb/delete")]
+        public async Task LiveStackRgbDelete([QueryField] string target)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(target))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Target is required", 400));
+                }
+                else if (!LivestackBridge.IsAvailable)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error(LivestackBridge.UnavailableReason, 400));
+                }
+                else if (!LivestackBridge.RemoveColorCombination(target))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error($"No colour combination found for target \"{target}\"", 400));
+                }
+                else
+                {
+                    // The RGB stack is gone - do not keep serving the stale image
+                    LiveStackWatcher.LiveStackHistory?.Remove(LivestackBridge.RgbFilter, target);
+                    await WebSocketV2.SendAndAddEvent("STACK-RGB-REMOVED", new Dictionary<string, object>()
+                    {
+                        { "Target", target },
+                    });
+                    response.Response = new { Target = target };
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                response = CoreUtility.CreateErrorTable(new Error(ex.Message, 400));
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
         [Route(HttpVerbs.Get, "/livestack/image/{target}/{filter}/info")]
         public async Task LiveStackImageInfo(string filter, string target)
         {
@@ -366,7 +639,7 @@ namespace ninaAPI.WebService.V2
 
             try
             {
-                LiveStackResponse l = LiveStackWatcher.LiveStackHistory.Images.Where(x => x.Filter == filter && x.Target == target).LastOrDefault();
+                LiveStackResponse l = LiveStackWatcher.LiveStackHistory.Find(filter, target);
                 if (l is null)
                 {
                     response = CoreUtility.CreateErrorTable(new Error("No image with specified filter and target found", 404));
