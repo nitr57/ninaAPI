@@ -152,6 +152,10 @@ channels:
                           type: string
                         Filename:
                           type: string
+                        Id:
+                          type: string
+                        IsDeleted:
+                          type: boolean
                 Error:
                   type: string
                 StatusCode:
