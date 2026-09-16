@@ -956,46 +956,46 @@ namespace ninaAPI.WebService.V2
         {
             HttpResponse response = new HttpResponse();
 
-            ImageResponse p = null;
-            if (!string.IsNullOrWhiteSpace(id))
+            lock (ImageWatcher.imageLock)
             {
-                lock (ImageWatcher.imageLock)
+                ImageResponse p = null;
+                if (!string.IsNullOrWhiteSpace(id))
                 {
                     p = ImageWatcher.Images.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.Ordinal));
                 }
-            }
 
-            if (p == null)
-            {
-                response = CoreUtility.CreateErrorTable(new Error("Unknown image id", 400));
-            }
-            else if (!string.IsNullOrEmpty(filename) && !string.Equals(filename, p.Filename, StringComparison.Ordinal))
-            {
-                response = CoreUtility.CreateErrorTable(new Error("Image file name does not match", 409));
-            }
-            else if (p.IsDeleted)
-            {
-                response = CoreUtility.CreateErrorTable(new Error("Image already deleted", 400));
-            }
-            else if (!File.Exists(p.GetPath()))
-            {
-                response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
-            }
-            else
-            {
-                try
+                if (p == null)
                 {
-                    File.Delete(p.GetPath());
-                    // The entry stays in the history: indices and thumbnails are positional,
-                    // removing it would shift every later image.
-                    p.IsDeleted = true;
-                    Logger.Info($"Deleted image {p.GetPath()} on request");
-                    response.Response = "Image deleted";
+                    response = CoreUtility.CreateErrorTable(new Error("Unknown image id", 400));
                 }
-                catch (Exception ex)
+                else if (!string.IsNullOrEmpty(filename) && !string.Equals(filename, p.Filename, StringComparison.Ordinal))
                 {
-                    Logger.Error(ex);
-                    response = CoreUtility.CreateErrorTable(new Error(ex.Message, 500));
+                    response = CoreUtility.CreateErrorTable(new Error("Image file name does not match", 409));
+                }
+                else if (p.IsDeleted)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Image already deleted", 400));
+                }
+                else if (!File.Exists(p.GetPath()))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
+                }
+                else
+                {
+                    try
+                    {
+                        File.Delete(p.GetPath());
+                        // The entry stays in the history: indices and thumbnails are positional,
+                        // removing it would shift every later image.
+                        p.IsDeleted = true;
+                        Logger.Info($"Deleted image {p.GetPath()} on request");
+                        response.Response = "Image deleted";
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(ex);
+                        response = CoreUtility.CreateErrorTable(new Error(ex.Message, 500));
+                    }
                 }
             }
 
