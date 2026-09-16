@@ -685,6 +685,13 @@ namespace ninaAPI.WebService.V2
                 {
                     ImageResponse p = points.ElementAt(index); // Get the history point at the specified index for the image
 
+                    if (p.IsDeleted)
+                    {
+                        response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
+                        HttpContext.WriteToResponse(response);
+                        return;
+                    }
+
                     IImageData imageData = await Retry.Do(async () => await AdvancedAPI.Controls.ImageDataFactory.CreateFromFile(p.GetPath(), 16, p.IsBayered, RawConverterEnum.FREEIMAGE), TimeSpan.FromMilliseconds(200), 10);
 
                     if (HttpContext.IsParameterOmitted(nameof(raw_fits)))
@@ -856,6 +863,12 @@ namespace ninaAPI.WebService.V2
                     else
                     {
                         ImageResponse p = points.ElementAt(index);
+                        if (p.IsDeleted)
+                        {
+                            response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
+                            HttpContext.WriteToResponse(response);
+                            return;
+                        }
                         IImageData imageData = await Retry.Do(async () => await AdvancedAPI.Controls.ImageDataFactory.CreateFromFile(p.GetPath(), 16, p.IsBayered, RawConverterEnum.FREEIMAGE), TimeSpan.FromMilliseconds(200), 10);
                         img = imageData.RenderImage();
                     }
@@ -918,6 +931,10 @@ namespace ninaAPI.WebService.V2
             else if (index >= points.Count() || index < 0)
             {
                 response = CoreUtility.CreateErrorTable(CommonErrors.INDEX_OUT_OF_RANGE);
+            }
+            else if (points.ElementAt(index).IsDeleted)
+            {
+                response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
             }
             else
             {
@@ -1058,7 +1075,15 @@ namespace ninaAPI.WebService.V2
                     {
                         var images = HttpContext.IsParameterOmitted(nameof(imageType)) ? ImageWatcher.Images : ImageWatcher.Images.Where(x => x.ImageType.Equals(imageType));
 
-                        var i = ImageWatcher.Images.IndexOf(images.ElementAt(index));
+                        ImageResponse image = images.ElementAt(index);
+                        if (image.IsDeleted)
+                        {
+                            response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
+                            HttpContext.WriteToResponse(response);
+                            return;
+                        }
+
+                        var i = ImageWatcher.Images.IndexOf(image);
                         res = ImageWatcher.Thumbnails.Where(x => x.Key == i).First().Value;
                         HttpContext.Response.ContentType = "image/jpeg";
                     }
