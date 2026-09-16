@@ -76,9 +76,7 @@ namespace ninaAPI.WebService.V2
         public double HFR { get; set; }
         public double HFRStDev { get; set; }
         public bool IsBayered { get; set; }
-        // Identity of the entry, assigned when the image was saved. Clients address
-        // destructive actions (delete) by it, never by the positional index: the
-        // index of an entry changes whenever the history is rebuilt.
+        // Identity of the entry, assigned when the image was saved.
         public string Id { get; set; }
         // Set by the delete action. The entry itself stays in the history because
         // indices and thumbnails are positional; clients hide flagged entries.
