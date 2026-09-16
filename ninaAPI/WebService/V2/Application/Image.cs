@@ -966,7 +966,7 @@ namespace ninaAPI.WebService.V2
 
                 if (p == null)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Unknown image id", 400));
+                    response = CoreUtility.CreateErrorTable(new Error("Unknown image id", 404));
                 }
                 else if (!string.IsNullOrEmpty(filename) && !string.Equals(filename, p.Filename, StringComparison.Ordinal))
                 {
