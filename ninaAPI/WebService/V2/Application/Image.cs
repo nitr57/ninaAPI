@@ -76,6 +76,13 @@ namespace ninaAPI.WebService.V2
         public double HFR { get; set; }
         public double HFRStDev { get; set; }
         public bool IsBayered { get; set; }
+        // Identity of the entry, assigned when the image was saved. Clients address
+        // destructive actions (delete) by it, never by the positional index: the
+        // index of an entry changes whenever the history is rebuilt.
+        public string Id { get; set; }
+        // Set by the delete action. The entry itself stays in the history because
+        // indices and thumbnails are positional; clients hide flagged entries.
+        public bool IsDeleted { get; set; }
         public string Filename { get => Path?.IsFile == true ? System.IO.Path.GetFileName(Path.LocalPath) : null; }
 
         private Uri Path { get; set; }
@@ -86,6 +93,7 @@ namespace ninaAPI.WebService.V2
         {
             return new ImageResponse()
             {
+                Id = Guid.NewGuid().ToString("N"),
                 ExposureTime = e.Duration,
                 TargetName = e.MetaData.Target.Name,
                 ImageType = e.MetaData.Image.ImageType,
@@ -930,6 +938,64 @@ namespace ninaAPI.WebService.V2
                     File.Move(p.GetPath(), newPath);
                     p.SetPath(newPath);
                     response.Response = "Image renamed with prefix " + prefix;
+                }
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        /// <summary>
+        /// Deletes the image file behind a history entry from disk. The entry is addressed by
+        /// its <see cref="ImageResponse.Id"/>, not by a positional index, so a history that was
+        /// rebuilt or extended between listing and deleting can never point at another file.
+        /// <paramref name="filename"/> is an optional cross-check: when given it has to match the
+        /// entry's file name, otherwise nothing is deleted (409).
+        /// </summary>
+        [Route(HttpVerbs.Delete, "/image-history/{id}")]
+        public void DeleteHistoryImage(string id, [QueryField] string filename)
+        {
+            HttpResponse response = new HttpResponse();
+
+            ImageResponse p = null;
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                lock (ImageWatcher.imageLock)
+                {
+                    p = ImageWatcher.Images.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.Ordinal));
+                }
+            }
+
+            if (p == null)
+            {
+                response = CoreUtility.CreateErrorTable(new Error("Unknown image id", 400));
+            }
+            else if (!string.IsNullOrEmpty(filename) && !string.Equals(filename, p.Filename, StringComparison.Ordinal))
+            {
+                response = CoreUtility.CreateErrorTable(new Error("Image file name does not match", 409));
+            }
+            else if (p.IsDeleted)
+            {
+                response = CoreUtility.CreateErrorTable(new Error("Image already deleted", 400));
+            }
+            else if (!File.Exists(p.GetPath()))
+            {
+                response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
+            }
+            else
+            {
+                try
+                {
+                    File.Delete(p.GetPath());
+                    // The entry stays in the history: indices and thumbnails are positional,
+                    // removing it would shift every later image.
+                    p.IsDeleted = true;
+                    Logger.Info($"Deleted image {p.GetPath()} on request");
+                    response.Response = "Image deleted";
+                }
+                catch (Exception ex)
+                {
+                    Logger.Error(ex);
+                    response = CoreUtility.CreateErrorTable(new Error(ex.Message, 500));
                 }
             }
 
