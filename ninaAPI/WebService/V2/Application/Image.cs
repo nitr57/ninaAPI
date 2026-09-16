@@ -976,6 +976,8 @@ namespace ninaAPI.WebService.V2
                 }
                 else if (!File.Exists(p.GetPath()))
                 {
+                    p.IsDeleted = true;
+                    Logger.Info($"Image file {p.GetPath()} does not exist, marking as deleted");
                     response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
                 }
                 else
