@@ -420,10 +420,10 @@ namespace ninaAPI.WebService.V2
             try
             {
                 ImageWatcher.PlateSolveState.IsSolving = true;
-                
+
                 var plateSolver = AdvancedAPI.Controls.PlateSolver.GetPlateSolver(AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings);
                 var blindSolver = AdvancedAPI.Controls.PlateSolver.GetBlindSolver(AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings);
-                
+
                 var parameter = new PlateSolveParameter()
                 {
                     Binning = AdvancedAPI.Controls.Camera.GetInfo()?.BinX ?? 1,
@@ -441,7 +441,7 @@ namespace ninaAPI.WebService.V2
                 using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
                 {
                     var result = imageSolver.Solve(renderedImage.RawImageData, parameter, null, cts.Token).GetAwaiter().GetResult();
-                    
+
                     if (result.Success && AdvancedAPI.Controls.Mount.GetInfo().Connected)
                     {
                         var scopePosition = AdvancedAPI.Controls.Mount.GetCurrentPosition();
@@ -462,9 +462,9 @@ namespace ninaAPI.WebService.V2
             catch (OperationCanceledException)
             {
                 Logger.Warning("Plate solve timed out after 60 seconds");
-                return new PlateSolveResponse 
-                { 
-                    Success = false, 
+                return new PlateSolveResponse
+                {
+                    Success = false,
                     Message = "Plate solve timed out after 60 seconds",
                     Error = "Timeout"
                 };
@@ -472,9 +472,9 @@ namespace ninaAPI.WebService.V2
             catch (Exception ex)
             {
                 Logger.Error("Error during plate solve", ex);
-                return new PlateSolveResponse 
-                { 
-                    Success = false, 
+                return new PlateSolveResponse
+                {
+                    Success = false,
                     Message = "Plate solve failed: " + ex.Message,
                     Error = ex.Message
                 };
@@ -507,16 +507,16 @@ namespace ninaAPI.WebService.V2
                 double? dec = null;
                 string raString = null;
                 string decString = null;
-                
+
                 if (coordinates != null)
                 {
                     var coordType = coordinates.GetType();
                     var raDegreesProperty = coordType.GetProperty("RADegrees");
                     var decProperty = coordType.GetProperty("Dec");
-                    
+
                     ra = (double?)(raDegreesProperty?.GetValue(coordinates));
                     dec = (double?)(decProperty?.GetValue(coordinates));
-                    
+
                     // Convert RA from degrees to hours and format as string
                     if (ra.HasValue)
                     {
@@ -526,7 +526,7 @@ namespace ninaAPI.WebService.V2
                         var seconds = ((raHours - hours) * 60 - minutes) * 60;
                         raString = $"{hours:D2}h{minutes:D2}m{seconds:F2}s";
                     }
-                    
+
                     // Format Dec as string
                     if (dec.HasValue)
                     {
@@ -555,10 +555,10 @@ namespace ninaAPI.WebService.V2
             catch (Exception ex)
             {
                 Logger.Error("Error formatting plate solve result", ex);
-                return new PlateSolveResponse 
-                { 
-                    Success = false, 
-                    Message = "Error formatting result: " + ex.Message 
+                return new PlateSolveResponse
+                {
+                    Success = false,
+                    Message = "Error formatting result: " + ex.Message
                 };
             }
         }
