@@ -918,41 +918,40 @@ namespace ninaAPI.WebService.V2
         {
             HttpResponse response = new HttpResponse();
 
-            IEnumerable<ImageResponse> points;
             lock (ImageWatcher.imageLock)
             {
-                points = HttpContext.IsParameterOmitted(nameof(imageType)) ? ImageWatcher.Images : ImageWatcher.Images.Where(x => x.ImageType.Equals(imageType));
-            }
+                IEnumerable<ImageResponse> points = HttpContext.IsParameterOmitted(nameof(imageType)) ? ImageWatcher.Images : ImageWatcher.Images.Where(x => x.ImageType.Equals(imageType));
 
-            if (!points.Any())
-            {
-                response = CoreUtility.CreateErrorTable(new Error("No images available", 400));
-            }
-            else if (index >= points.Count() || index < 0)
-            {
-                response = CoreUtility.CreateErrorTable(CommonErrors.INDEX_OUT_OF_RANGE);
-            }
-            else if (points.ElementAt(index).IsDeleted)
-            {
-                response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
-            }
-            else
-            {
-                ImageResponse p = points.ElementAt(index);
-                string newPath = Path.Join(Path.GetDirectoryName(p.GetPath()), prefix + Path.GetFileName(p.GetPath()));
-                if (File.Exists(newPath))
+                if (!points.Any())
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("File already exists", 400));
+                    response = CoreUtility.CreateErrorTable(new Error("No images available", 400));
                 }
-                else if (!File.Exists(p.GetPath()))
+                else if (index >= points.Count() || index < 0)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
+                    response = CoreUtility.CreateErrorTable(CommonErrors.INDEX_OUT_OF_RANGE);
+                }
+                else if (points.ElementAt(index).IsDeleted)
+                {
+                    response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
                 }
                 else
                 {
-                    File.Move(p.GetPath(), newPath);
-                    p.SetPath(newPath);
-                    response.Response = "Image renamed with prefix " + prefix;
+                    ImageResponse p = points.ElementAt(index);
+                    string newPath = Path.Join(Path.GetDirectoryName(p.GetPath()), prefix + Path.GetFileName(p.GetPath()));
+                    if (File.Exists(newPath))
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("File already exists", 400));
+                    }
+                    else if (!File.Exists(p.GetPath()))
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
+                    }
+                    else
+                    {
+                        File.Move(p.GetPath(), newPath);
+                        p.SetPath(newPath);
+                        response.Response = "Image renamed with prefix " + prefix;
+                    }
                 }
             }
 
