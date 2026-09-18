@@ -6542,6 +6542,13 @@ paths:
                               type: string
                             Filename:
                               type: string
+                            Id:
+                              type: string
+                              description: Identity of the entry, assigned when the image was saved. Use it to address the image delete endpoint; the positional index is not stable across a rebuilt history.
+                              example: "3f2b9c6e1d4a4f0b8e7c2a1d5b6e7f80"
+                            IsDeleted:
+                              type: boolean
+                              description: True once the file was removed with the image delete endpoint. The entry stays in the history so indices remain stable; clients should hide it.
                       - type: integer
                         description: The number of images
                         example: 1
@@ -6646,6 +6653,99 @@ paths:
                     example: "API"
         "500":
           description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /image-history/{id}:
+    delete:
+      tags:
+        - Image
+      summary: Delete Image
+      description: Deletes the image file behind a history entry from disk. The entry is addressed by the Id from the image history, never by its index, so a history that changed between listing and deleting cannot point at another file. The history entry itself is kept and flagged with IsDeleted so that the indices of later images do not change.
+      parameters:
+        - in: path
+          name: id
+          description: The Id of the history entry whose file is deleted
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: filename
+          description: Optional cross-check. When given it has to match the entry's Filename, otherwise nothing is deleted and 409 is returned.
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: "Image deleted"
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "400":
+          description: Unknown image id, image already deleted, or image file does not exist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    example: "Image file does not exist"
+                  StatusCode:
+                    type: integer
+                    example: 400
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "409":
+          description: The filename cross-check does not match the entry
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    example: "Image file name does not match"
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "500":
+          description: The file system refused to delete the file
           content:
             application/json:
               schema:

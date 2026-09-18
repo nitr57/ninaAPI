@@ -76,6 +76,11 @@ namespace ninaAPI.WebService.V2
         public double HFR { get; set; }
         public double HFRStDev { get; set; }
         public bool IsBayered { get; set; }
+        // Identity of the entry, assigned when the image was saved.
+        public string Id { get; set; }
+        // Set by the delete action. The entry itself stays in the history because
+        // indices and thumbnails are positional; clients hide flagged entries.
+        public bool IsDeleted { get; set; }
         public string Filename { get => Path?.IsFile == true ? System.IO.Path.GetFileName(Path.LocalPath) : null; }
 
         private Uri Path { get; set; }
@@ -86,6 +91,7 @@ namespace ninaAPI.WebService.V2
         {
             return new ImageResponse()
             {
+                Id = Guid.NewGuid().ToString("N"),
                 ExposureTime = e.Duration,
                 TargetName = e.MetaData.Target.Name,
                 ImageType = e.MetaData.Image.ImageType,
@@ -412,10 +418,10 @@ namespace ninaAPI.WebService.V2
             try
             {
                 ImageWatcher.PlateSolveState.IsSolving = true;
-                
+
                 var plateSolver = AdvancedAPI.Controls.PlateSolver.GetPlateSolver(AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings);
                 var blindSolver = AdvancedAPI.Controls.PlateSolver.GetBlindSolver(AdvancedAPI.Controls.Profile.ActiveProfile.PlateSolveSettings);
-                
+
                 var parameter = new PlateSolveParameter()
                 {
                     Binning = AdvancedAPI.Controls.Camera.GetInfo()?.BinX ?? 1,
@@ -433,7 +439,7 @@ namespace ninaAPI.WebService.V2
                 using (var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60)))
                 {
                     var result = imageSolver.Solve(renderedImage.RawImageData, parameter, null, cts.Token).GetAwaiter().GetResult();
-                    
+
                     if (result.Success && AdvancedAPI.Controls.Mount.GetInfo().Connected)
                     {
                         var scopePosition = AdvancedAPI.Controls.Mount.GetCurrentPosition();
@@ -454,9 +460,9 @@ namespace ninaAPI.WebService.V2
             catch (OperationCanceledException)
             {
                 Logger.Warning("Plate solve timed out after 60 seconds");
-                return new PlateSolveResponse 
-                { 
-                    Success = false, 
+                return new PlateSolveResponse
+                {
+                    Success = false,
                     Message = "Plate solve timed out after 60 seconds",
                     Error = "Timeout"
                 };
@@ -464,9 +470,9 @@ namespace ninaAPI.WebService.V2
             catch (Exception ex)
             {
                 Logger.Error("Error during plate solve", ex);
-                return new PlateSolveResponse 
-                { 
-                    Success = false, 
+                return new PlateSolveResponse
+                {
+                    Success = false,
                     Message = "Plate solve failed: " + ex.Message,
                     Error = ex.Message
                 };
@@ -499,16 +505,16 @@ namespace ninaAPI.WebService.V2
                 double? dec = null;
                 string raString = null;
                 string decString = null;
-                
+
                 if (coordinates != null)
                 {
                     var coordType = coordinates.GetType();
                     var raDegreesProperty = coordType.GetProperty("RADegrees");
                     var decProperty = coordType.GetProperty("Dec");
-                    
+
                     ra = (double?)(raDegreesProperty?.GetValue(coordinates));
                     dec = (double?)(decProperty?.GetValue(coordinates));
-                    
+
                     // Convert RA from degrees to hours and format as string
                     if (ra.HasValue)
                     {
@@ -518,7 +524,7 @@ namespace ninaAPI.WebService.V2
                         var seconds = ((raHours - hours) * 60 - minutes) * 60;
                         raString = $"{hours:D2}h{minutes:D2}m{seconds:F2}s";
                     }
-                    
+
                     // Format Dec as string
                     if (dec.HasValue)
                     {
@@ -547,10 +553,10 @@ namespace ninaAPI.WebService.V2
             catch (Exception ex)
             {
                 Logger.Error("Error formatting plate solve result", ex);
-                return new PlateSolveResponse 
-                { 
-                    Success = false, 
-                    Message = "Error formatting result: " + ex.Message 
+                return new PlateSolveResponse
+                {
+                    Success = false,
+                    Message = "Error formatting result: " + ex.Message
                 };
             }
         }
@@ -678,6 +684,13 @@ namespace ninaAPI.WebService.V2
                 else
                 {
                     ImageResponse p = points.ElementAt(index); // Get the history point at the specified index for the image
+
+                    if (p.IsDeleted)
+                    {
+                        response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
+                        HttpContext.WriteToResponse(response);
+                        return;
+                    }
 
                     IImageData imageData = await Retry.Do(async () => await AdvancedAPI.Controls.ImageDataFactory.CreateFromFile(p.GetPath(), 16, p.IsBayered, RawConverterEnum.FREEIMAGE), TimeSpan.FromMilliseconds(200), 10);
 
@@ -850,6 +863,12 @@ namespace ninaAPI.WebService.V2
                     else
                     {
                         ImageResponse p = points.ElementAt(index);
+                        if (p.IsDeleted)
+                        {
+                            response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
+                            HttpContext.WriteToResponse(response);
+                            return;
+                        }
                         IImageData imageData = await Retry.Do(async () => await AdvancedAPI.Controls.ImageDataFactory.CreateFromFile(p.GetPath(), 16, p.IsBayered, RawConverterEnum.FREEIMAGE), TimeSpan.FromMilliseconds(200), 10);
                         img = imageData.RenderImage();
                     }
@@ -899,37 +918,100 @@ namespace ninaAPI.WebService.V2
         {
             HttpResponse response = new HttpResponse();
 
-            IEnumerable<ImageResponse> points;
             lock (ImageWatcher.imageLock)
             {
-                points = HttpContext.IsParameterOmitted(nameof(imageType)) ? ImageWatcher.Images : ImageWatcher.Images.Where(x => x.ImageType.Equals(imageType));
+                IEnumerable<ImageResponse> points = HttpContext.IsParameterOmitted(nameof(imageType)) ? ImageWatcher.Images : ImageWatcher.Images.Where(x => x.ImageType.Equals(imageType));
+
+                if (!points.Any())
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("No images available", 400));
+                }
+                else if (index >= points.Count() || index < 0)
+                {
+                    response = CoreUtility.CreateErrorTable(CommonErrors.INDEX_OUT_OF_RANGE);
+                }
+                else if (points.ElementAt(index).IsDeleted)
+                {
+                    response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
+                }
+                else
+                {
+                    ImageResponse p = points.ElementAt(index);
+                    string newPath = Path.Join(Path.GetDirectoryName(p.GetPath()), prefix + Path.GetFileName(p.GetPath()));
+                    if (File.Exists(newPath))
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("File already exists", 400));
+                    }
+                    else if (!File.Exists(p.GetPath()))
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
+                    }
+                    else
+                    {
+                        File.Move(p.GetPath(), newPath);
+                        p.SetPath(newPath);
+                        response.Response = "Image renamed with prefix " + prefix;
+                    }
+                }
             }
 
-            if (!points.Any())
+            HttpContext.WriteToResponse(response);
+        }
+
+        /// <summary>
+        /// Deletes the image file behind a history entry from disk. The entry is addressed by
+        /// its <see cref="ImageResponse.Id"/>, not by a positional index, so a history that was
+        /// rebuilt or extended between listing and deleting can never point at another file.
+        /// <paramref name="filename"/> is an optional cross-check: when given it has to match the
+        /// entry's file name, otherwise nothing is deleted (409).
+        /// </summary>
+        [Route(HttpVerbs.Delete, "/image-history/{id}")]
+        public void DeleteHistoryImage(string id, [QueryField] string filename)
+        {
+            HttpResponse response = new HttpResponse();
+
+            lock (ImageWatcher.imageLock)
             {
-                response = CoreUtility.CreateErrorTable(new Error("No images available", 400));
-            }
-            else if (index >= points.Count() || index < 0)
-            {
-                response = CoreUtility.CreateErrorTable(CommonErrors.INDEX_OUT_OF_RANGE);
-            }
-            else
-            {
-                ImageResponse p = points.ElementAt(index);
-                string newPath = Path.Join(Path.GetDirectoryName(p.GetPath()), prefix + Path.GetFileName(p.GetPath()));
-                if (File.Exists(newPath))
+                ImageResponse p = null;
+                if (!string.IsNullOrWhiteSpace(id))
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("File already exists", 400));
+                    p = ImageWatcher.Images.FirstOrDefault(x => string.Equals(x.Id, id, StringComparison.Ordinal));
+                }
+
+                if (p == null)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Unknown image id", 404));
+                }
+                else if (!string.IsNullOrEmpty(filename) && !string.Equals(filename, p.Filename, StringComparison.Ordinal))
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Image file name does not match", 409));
+                }
+                else if (p.IsDeleted)
+                {
+                    response = CoreUtility.CreateErrorTable(new Error("Image already deleted", 400));
                 }
                 else if (!File.Exists(p.GetPath()))
                 {
+                    p.IsDeleted = true;
+                    Logger.Info($"Image file {p.GetPath()} does not exist, marking as deleted");
                     response = CoreUtility.CreateErrorTable(new Error("Image file does not exist", 400));
                 }
                 else
                 {
-                    File.Move(p.GetPath(), newPath);
-                    p.SetPath(newPath);
-                    response.Response = "Image renamed with prefix " + prefix;
+                    try
+                    {
+                        File.Delete(p.GetPath());
+                        // The entry stays in the history: indices and thumbnails are positional,
+                        // removing it would shift every later image.
+                        p.IsDeleted = true;
+                        Logger.Info($"Deleted image {p.GetPath()} on request");
+                        response.Response = "Image deleted";
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Error(ex);
+                        response = CoreUtility.CreateErrorTable(new Error(ex.Message, 500));
+                    }
                 }
             }
 
@@ -992,7 +1074,15 @@ namespace ninaAPI.WebService.V2
                     {
                         var images = HttpContext.IsParameterOmitted(nameof(imageType)) ? ImageWatcher.Images : ImageWatcher.Images.Where(x => x.ImageType.Equals(imageType));
 
-                        var i = ImageWatcher.Images.IndexOf(images.ElementAt(index));
+                        ImageResponse image = images.ElementAt(index);
+                        if (image.IsDeleted)
+                        {
+                            response = CoreUtility.CreateErrorTable(CommonErrors.IMAGE_DELETED);
+                            HttpContext.WriteToResponse(response);
+                            return;
+                        }
+
+                        var i = ImageWatcher.Images.IndexOf(image);
                         res = ImageWatcher.Thumbnails.Where(x => x.Key == i).First().Value;
                         HttpContext.Response.ContentType = "image/jpeg";
                     }

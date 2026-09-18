@@ -15,6 +15,7 @@ namespace ninaAPI.WebService
     {
         public static readonly Error INDEX_OUT_OF_RANGE = new Error("Index out of range", 400);
         public static readonly Error UNKNOWN_ERROR = new Error("Unknown error", 500);
+        public static readonly Error IMAGE_DELETED = new Error("Image was deleted", 404);
     }
 
     public class Error(string Message, int Code)
