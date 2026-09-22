@@ -57,6 +57,7 @@ channels:
                         - GUIDER-START
                         - GUIDER-STOP
                         - GUIDER-DITHER
+                        - GUIDER-STATE
                         - IMAGE-PREPARED
                         - MOUNT-CONNECTED
                         - MOUNT-DISCONNECTED
@@ -66,6 +67,13 @@ channels:
                         - MOUNT-PARKED
                         - MOUNT-UNPARKED
                         - MOUNT-CENTER
+                        - MOUNT-SLEW-START
+                        - MOUNT-SLEW-STOP
+                        - MOUNT-TRACKING-START
+                        - MOUNT-TRACKING-STOP
+                        - PLATESOLVE-START
+                        - PLATESOLVE-SUCCESS
+                        - PLATESOLVE-FAILED
                         - PROFILE-ADDED
                         - PROFILE-CHANGED
                         - PROFILE-REMOVED
@@ -152,6 +160,8 @@ channels:
                           type: string
                         Filename:
                           type: string
+                        FocuserPosition:
+                          type: integer
                         Id:
                           type: string
                         IsDeleted:
@@ -184,6 +194,32 @@ channels:
                           type: number
                         HFR:
                           type: number
+                Error:
+                  type: string
+                StatusCode:
+                  type: integer
+                  example: 200
+                Success:
+                  type: boolean
+                  example: true
+                Type:
+                  type: string
+                  example: "Socket"
+          - contentType: application/json
+            title: Guider State Event
+            payload:
+              type: object
+              properties:
+                Response:
+                  type: object
+                  properties:
+                    Event:
+                      type: string
+                      example: GUIDER-STATE
+                    State:
+                      type: string
+                      description: The state reported by the guider, for PHD2 its app state
+                      example: Guiding
                 Error:
                   type: string
                 StatusCode:

@@ -87,6 +87,16 @@ namespace ninaAPI
             re = new Regex("^ASTAP - Plate solve failed.", options);
             _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_ERROR_PLATESOLVE, false, null));
 
+            // Plate solves, as logged by NINA's ImageSolver for every solver
+            re = new Regex("^Platesolving with parameters:", options);
+            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_START, false, null));
+
+            re = new Regex("^Platesolve successful:", options);
+            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_SUCCESS, false, null));
+
+            re = new Regex("^Platesolve failed$", options);
+            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_FAILED, false, null));
+
             return _matchers;
         }
 

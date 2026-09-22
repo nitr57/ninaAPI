@@ -87,9 +87,37 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Mount.RemoveConsumer(this);
         }
 
+        // Null until the first update after connect, so an already tracking mount still gets its start event
+        private static bool? lastSlewing;
+        private static bool? lastTracking;
+
         public async void UpdateDeviceInfo(TelescopeInfo deviceInfo)
         {
             await WebSocketV2.SendConsumerEvent("MOUNT");
+
+            if (deviceInfo == null || !deviceInfo.Connected)
+            {
+                lastSlewing = null;
+                lastTracking = null;
+                return;
+            }
+
+            // Remember the new values before awaiting: the next update may arrive during a send
+            bool slewing = deviceInfo.Slewing;
+            bool tracking = deviceInfo.TrackingEnabled;
+            bool slewingChanged = slewing != (lastSlewing ?? false);
+            bool trackingChanged = tracking != (lastTracking ?? false);
+            lastSlewing = slewing;
+            lastTracking = tracking;
+
+            if (slewingChanged)
+            {
+                await WebSocketV2.SendAndAddEvent(slewing ? "MOUNT-SLEW-START" : "MOUNT-SLEW-STOP");
+            }
+            if (trackingChanged)
+            {
+                await WebSocketV2.SendAndAddEvent(tracking ? "MOUNT-TRACKING-START" : "MOUNT-TRACKING-STOP");
+            }
         }
     }
 

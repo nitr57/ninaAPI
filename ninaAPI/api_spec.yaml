@@ -3408,6 +3408,107 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnknownError"
 
+  /equipment/guider/history:
+    get:
+      tags:
+        - Guider
+      summary: History
+      description: Gets the guide steps recorded since the API started, unlike the graph not limited to the steps shown in NINA. The buffer keeps the newest MaxSize steps. Pass the Time of the last step you already have as since to only get the newer ones.
+      parameters:
+        - in: query
+          name: since
+          description: Only return steps after this time (ISO 8601, as returned in Time)
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: object
+                    properties:
+                      PixelScale:
+                        type: number
+                        description: Arcseconds per pixel of the guider, 0 if unknown
+                      Count:
+                        type: integer
+                        description: Number of steps in the buffer, regardless of since
+                      MaxSize:
+                        type: integer
+                        example: 50000
+                      Steps:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            Time:
+                              type: string
+                              format: date-time
+                              description: UTC
+                            RADistanceRaw:
+                              type: number
+                            DECDistanceRaw:
+                              type: number
+                            RADuration:
+                              type: number
+                            DECDuration:
+                              type: number
+                            SNR:
+                              type: number
+                              description: PHD2 only
+                            StarMass:
+                              type: number
+                              description: PHD2 only
+                            HFD:
+                              type: number
+                              description: PHD2 only
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "400":
+          description: Invalid since timestamp
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    example: "Invalid 'since' timestamp"
+                  StatusCode:
+                    type: integer
+                    example: 400
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
   /equipment/mount/info:
     get:
       tags:
@@ -6542,6 +6643,9 @@ paths:
                               type: string
                             Filename:
                               type: string
+                            FocuserPosition:
+                              type: integer
+                              description: Focuser position when the image was taken, omitted without a focuser
                             Id:
                               type: string
                               description: Identity of the entry, assigned when the image was saved. Use it to address the image delete endpoint; the positional index is not stable across a rebuilt history.

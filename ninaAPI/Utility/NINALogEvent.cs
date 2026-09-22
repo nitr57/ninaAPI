@@ -10,6 +10,9 @@ namespace ninaAPI
         public const string NINA_CENTER = "MOUNT-CENTER";
         public const string NINA_ERROR_AF = "ERROR-AF";
         public const string NINA_ERROR_PLATESOLVE = "ERROR-PLATESOLVE";
+        public const string NINA_PLATESOLVE_START = "PLATESOLVE-START";
+        public const string NINA_PLATESOLVE_SUCCESS = "PLATESOLVE-SUCCESS";
+        public const string NINA_PLATESOLVE_FAILED = "PLATESOLVE-FAILED";
 
         public string id { get; set; }
         public string type { get; set; }
