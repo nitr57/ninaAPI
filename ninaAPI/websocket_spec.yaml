@@ -300,6 +300,8 @@ channels:
               Read from the lines NINA logs for every plate solve. Each PLATESOLVE-START is followed by one
               PLATESOLVE-SUCCESS or PLATESOLVE-FAILED. With blind failover a solve with coordinates that fails
               is followed by PLATESOLVE-FAILED and, at the same time, the PLATESOLVE-START of the blind solve.
+              A solve that throws or is cancelled logs no result, so its PLATESOLVE-START has none: clients
+              should treat an open solve as ended when the next PLATESOLVE-START arrives or after a timeout.
             payload:
               type: object
               properties:
