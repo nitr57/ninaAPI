@@ -241,6 +241,12 @@ namespace ninaAPI.WebService.V2
 
         public async void UpdateDeviceInfo(GuiderInfo deviceInfo)
         {
+            if (deviceInfo?.Connected != true)
+            {
+                // A reconnect may bring back the same guider object in the same state,
+                // which is still news after the disconnect
+                lastState = null;
+            }
             // Broadcast on connect and disconnect, which is when the device changes
             ObserveGuider();
             await WebSocketV2.SendConsumerEvent("GUIDER");
