@@ -24,7 +24,6 @@ using ninaAPI.Utility;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -85,7 +84,10 @@ namespace ninaAPI.WebService.V2
 
     public class GuideStepHistoryEntry
     {
-        // UTC, so the since cursor of /equipment/guider/history survives a DST change.
+        // Counts up by one per step, the cursor of /equipment/guider/history. Unlike Time it
+        // cannot go back, e.g. when NTP or GPS sets the clock of a Pi without RTC mid-session.
+        public long Id { get; set; }
+        // UTC
         public DateTime Time { get; set; }
         public double RADistanceRaw { get; set; }
         public double DECDistanceRaw { get; set; }
@@ -115,6 +117,7 @@ namespace ninaAPI.WebService.V2
 
     public class GuideStepHistoryResponse
     {
+        public string Session { get; set; }
         public double PixelScale { get; set; }
         public int Count { get; set; }
         public int MaxSize { get; set; }
@@ -127,8 +130,11 @@ namespace ninaAPI.WebService.V2
 
         // Every guide step since the API started; beyond this the oldest are dropped (~14 h at 1 step/s).
         public const int MaxHistorySize = 50000;
+        // A new value whenever NINA starts, which starts the step ids over
+        public static readonly string HistorySession = Guid.NewGuid().ToString();
         private static readonly object historyLock = new object();
         private static readonly List<GuideStepHistoryEntry> history = new List<GuideStepHistoryEntry>();
+        private static long lastHistoryId;
 
         private static INotifyPropertyChanged observedGuider;
         private static string lastState;
@@ -137,6 +143,7 @@ namespace ninaAPI.WebService.V2
         {
             lock (historyLock)
             {
+                entry.Id = ++lastHistoryId;
                 history.Add(entry);
                 if (history.Count > MaxHistorySize)
                 {
@@ -145,35 +152,15 @@ namespace ninaAPI.WebService.V2
             }
         }
 
-        public static List<GuideStepHistoryEntry> GetHistory(DateTime? sinceUtc, out int total)
+        public static List<GuideStepHistoryEntry> GetHistory(long afterId, out int total)
         {
             lock (historyLock)
             {
                 total = history.Count;
-                int start = sinceUtc.HasValue ? FirstEntryAfter(sinceUtc.Value) : 0;
+                // The ids are consecutive, so the first entry after the cursor is at a known offset
+                int start = history.Count == 0 ? 0 : (int)Math.Clamp(afterId - history[0].Id + 1, 0, history.Count);
                 return history.GetRange(start, history.Count - start);
             }
-        }
-
-        // Index of the first entry strictly newer than the cursor. Entries are appended in
-        // ascending Time order, so a binary search finds the tail in O(log n).
-        private static int FirstEntryAfter(DateTime sinceUtc)
-        {
-            int lo = 0;
-            int hi = history.Count;
-            while (lo < hi)
-            {
-                int mid = lo + (hi - lo) / 2;
-                if (history[mid].Time > sinceUtc)
-                {
-                    hi = mid;
-                }
-                else
-                {
-                    lo = mid + 1;
-                }
-            }
-            return lo;
         }
 
         // The guider state (PHD2 app state) is only observable on the device itself:
@@ -408,24 +395,13 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/guider/history")]
-        public void GuiderHistory([QueryField] string since)
+        public void GuiderHistory([QueryField] long after)
         {
             HttpResponse response = new HttpResponse();
 
             try
             {
-                DateTime? sinceUtc = null;
-                if (!string.IsNullOrWhiteSpace(since))
-                {
-                    if (!DateTimeOffset.TryParse(since, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset parsed))
-                    {
-                        HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error("Invalid 'since' timestamp", 400)));
-                        return;
-                    }
-                    sinceUtc = parsed.UtcDateTime;
-                }
-
-                List<GuideStepHistoryEntry> steps = GuiderWatcher.GetHistory(sinceUtc, out int total);
+                List<GuideStepHistoryEntry> steps = GuiderWatcher.GetHistory(after, out int total);
 
                 double pixelScale = 0;
                 try
@@ -436,6 +412,7 @@ namespace ninaAPI.WebService.V2
 
                 response.Response = new GuideStepHistoryResponse()
                 {
+                    Session = GuiderWatcher.HistorySession,
                     PixelScale = pixelScale,
                     Count = total,
                     MaxSize = GuiderWatcher.MaxHistorySize,

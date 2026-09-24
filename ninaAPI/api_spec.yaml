@@ -3413,15 +3413,15 @@ paths:
       tags:
         - Guider
       summary: History
-      description: Gets the guide steps recorded since the API started, unlike the graph not limited to the steps shown in NINA. The buffer keeps the newest MaxSize steps. Pass the Time of the last step you already have as since to only get the newer ones.
+      description: Gets the guide steps recorded since the API started, unlike the graph not limited to the steps shown in NINA. The buffer keeps the newest MaxSize steps. Every step has an Id that counts up by one; pass the Id of the last step you already have as after to only get the newer ones. When NINA restarts the ids start over at 1 and Session changes, so a client that sees a new Session has to read the history from its start again.
       parameters:
         - in: query
-          name: since
-          description: Only return steps after this time (ISO 8601, as returned in Time)
+          name: after
+          description: Only return steps with a larger Id. Omit it or pass 0 for all steps
           required: false
           schema:
-            type: string
-            format: date-time
+            type: integer
+            format: int64
       responses:
         "200":
           description: Successful response
@@ -3433,12 +3433,16 @@ paths:
                   Response:
                     type: object
                     properties:
+                      Session:
+                        type: string
+                        format: uuid
+                        description: Changes when NINA restarts, and with it the step ids start over
                       PixelScale:
                         type: number
                         description: Arcseconds per pixel of the guider, 0 if unknown
                       Count:
                         type: integer
-                        description: Number of steps in the buffer, regardless of since
+                        description: Number of steps in the buffer, regardless of after
                       MaxSize:
                         type: integer
                         example: 50000
@@ -3447,6 +3451,10 @@ paths:
                         items:
                           type: object
                           properties:
+                            Id:
+                              type: integer
+                              format: int64
+                              description: One more than the Id of the step before
                             Time:
                               type: string
                               format: date-time
@@ -3477,28 +3485,6 @@ paths:
                   Success:
                     type: boolean
                     example: true
-                  Type:
-                    type: string
-                    example: "API"
-        "400":
-          description: Invalid since timestamp
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  Response:
-                    type: string
-                    example: ""
-                  Error:
-                    type: string
-                    example: "Invalid 'since' timestamp"
-                  StatusCode:
-                    type: integer
-                    example: 400
-                  Success:
-                    type: boolean
-                    example: false
                   Type:
                     type: string
                     example: "API"
