@@ -7573,7 +7573,7 @@ paths:
       tags:
         - Event Websocket
       summary: Event History
-      description: Get event history
+      description: Get the events sent on the websocket since the API started, the newest 10000 of them
       responses:
         "200":
           description: Successful response

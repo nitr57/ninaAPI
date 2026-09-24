@@ -223,7 +223,7 @@ namespace ninaAPI.WebService.V2
                 Images.Add(r);
             }
 
-            WebSocketV2.Events.Add(imageEvent);
+            WebSocketV2.AddEvent(imageEvent);
 
             CacheThumbnail(e);
 
