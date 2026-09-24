@@ -69,6 +69,7 @@ channels:
                         - MOUNT-CENTER
                         - MOUNT-SLEW-START
                         - MOUNT-SLEW-STOP
+                        - MOUNT-SLEWED
                         - MOUNT-TRACKING-START
                         - MOUNT-TRACKING-STOP
                         - PLATESOLVE-START
@@ -220,6 +221,68 @@ channels:
                       type: string
                       description: The state reported by the guider, for PHD2 its app state
                       example: Guiding
+                Error:
+                  type: string
+                StatusCode:
+                  type: integer
+                  example: 200
+                Success:
+                  type: boolean
+                  example: true
+                Type:
+                  type: string
+                  example: "Socket"
+          - contentType: application/json
+            title: Mount Slewed Event
+            description: >-
+              Sent when a goto issued through NINA, a centering slew included, has finished and settled.
+              MOUNT-SLEW-START and MOUNT-SLEW-STOP come from the Slewing flag of the mount info polls, so they miss
+              a slew that ends between two polls and every slew of a mount that doesn't report Slewing (e.g. OnStep)
+            payload:
+              type: object
+              properties:
+                Response:
+                  type: object
+                  properties:
+                    Event:
+                      type: string
+                      example: MOUNT-SLEWED
+                    From:
+                      type: object
+                      description: The mount position before the slew, in the mount's epoch
+                      properties:
+                        RA:
+                          type: number
+                          description: Hours
+                        RADegrees:
+                          type: number
+                        RAString:
+                          type: string
+                        Dec:
+                          type: number
+                          description: Degrees
+                        DecString:
+                          type: string
+                        Epoch:
+                          type: string
+                          example: JNOW
+                    To:
+                      type: object
+                      description: The slew target, same fields as From
+                      properties:
+                        RA:
+                          type: number
+                        RADegrees:
+                          type: number
+                        RAString:
+                          type: string
+                        Dec:
+                          type: number
+                        DecString:
+                          type: string
+                        Epoch:
+                          type: string
+                          example: J2000
                 Error:
                   type: string
                 StatusCode:

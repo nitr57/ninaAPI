@@ -57,6 +57,12 @@ namespace ninaAPI.WebService.V2
         private readonly Func<object, EventArgs, Task> MountHomedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("MOUNT-HOMED");
         private readonly Func<object, EventArgs, Task> MountParkedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("MOUNT-PARKED");
         private readonly Func<object, EventArgs, Task> MountUnparkedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("MOUNT-UNPARKED");
+        // Every goto issued through NINA, centering slews included. MOUNT-SLEW-START/STOP only see a slew an info poll
+        // catches, which misses one that ends between two polls and all of them on a mount that doesn't report Slewing (OnStep)
+        private readonly Func<object, MountSlewedEventArgs, Task> MountSlewedHandler = async (_, e) => await WebSocketV2.SendAndAddEvent("MOUNT-SLEWED", new Dictionary<string, object>() {
+            { "From", e.From },
+            { "To", e.To }
+        });
 
         public void Dispose()
         {
@@ -72,6 +78,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Mount.Homed += MountHomedHandler;
             AdvancedAPI.Controls.Mount.Parked += MountParkedHandler;
             AdvancedAPI.Controls.Mount.Unparked += MountUnparkedHandler;
+            AdvancedAPI.Controls.Mount.Slewed += MountSlewedHandler;
             AdvancedAPI.Controls.Mount.RegisterConsumer(this);
         }
 
@@ -84,6 +91,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Mount.Homed -= MountHomedHandler;
             AdvancedAPI.Controls.Mount.Parked -= MountParkedHandler;
             AdvancedAPI.Controls.Mount.Unparked -= MountUnparkedHandler;
+            AdvancedAPI.Controls.Mount.Slewed -= MountSlewedHandler;
             AdvancedAPI.Controls.Mount.RemoveConsumer(this);
         }
 
