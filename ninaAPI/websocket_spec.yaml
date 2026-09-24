@@ -25,7 +25,10 @@ channels:
                   properties:
                     Event:
                       type: string
-                      description: The event name
+                      description: >-
+                        The event name. MOUNT-CENTER and DOME-STOPPED, like the plate solve events, are read
+                        from lines NINA logs at Info level: they are only sent when NINA's log level is Info,
+                        Debug or Trace
                       enum:
                         - API-CAPTURE-FINISHED
                         - AUTOFOCUS-FINISHED
@@ -302,6 +305,8 @@ channels:
               is followed by PLATESOLVE-FAILED and, at the same time, the PLATESOLVE-START of the blind solve.
               A solve that throws or is cancelled logs no result, so its PLATESOLVE-START has none: clients
               should treat an open solve as ended when the next PLATESOLVE-START arrives or after a timeout.
+              NINA logs these lines at Info level, so at the log level Warning or Error no plate solve events
+              are sent at all.
             payload:
               type: object
               properties:
