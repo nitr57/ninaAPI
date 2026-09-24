@@ -295,6 +295,35 @@ channels:
                   type: string
                   example: "Socket"
           - contentType: application/json
+            title: Plate Solve Events
+            description: >-
+              Read from the lines NINA logs for every plate solve. Each PLATESOLVE-START is followed by one
+              PLATESOLVE-SUCCESS or PLATESOLVE-FAILED. With blind failover a solve with coordinates that fails
+              is followed by PLATESOLVE-FAILED and, at the same time, the PLATESOLVE-START of the blind solve.
+            payload:
+              type: object
+              properties:
+                Response:
+                  type: object
+                  properties:
+                    Event:
+                      type: string
+                      enum:
+                        - PLATESOLVE-START
+                        - PLATESOLVE-SUCCESS
+                        - PLATESOLVE-FAILED
+                Error:
+                  type: string
+                StatusCode:
+                  type: integer
+                  example: 200
+                Success:
+                  type: boolean
+                  example: true
+                Type:
+                  type: string
+                  example: "Socket"
+          - contentType: application/json
             title: Filter Changed Event
             payload:
               type: object

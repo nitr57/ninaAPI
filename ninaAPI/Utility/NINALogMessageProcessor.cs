@@ -12,6 +12,11 @@ namespace ninaAPI
         private static List<NINALogEvent> previousEvents = new List<NINALogEvent>();
         private Dictionary<Regex, EventMatcher> matchers;
 
+        // Pairing of the plate solve lines, see PlateSolveStarted
+        private bool solveOpen;
+        private bool openSolveCanFailOver;
+        private bool resultEchoPending;
+
         public NINALogMessageProcessor()
         {
             matchers = initMatchers();
@@ -89,15 +94,43 @@ namespace ninaAPI
 
             // Plate solves, as logged by NINA's ImageSolver for every solver
             re = new Regex("^Platesolving with parameters:", options);
-            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_START, false, null));
+            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_START, false, PlateSolveStarted));
 
             re = new Regex("^Platesolve successful:", options);
-            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_SUCCESS, false, null));
+            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_SUCCESS, false, PlateSolveFinished));
 
             re = new Regex("^Platesolve failed$", options);
-            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_FAILED, false, null));
+            _matchers.Add(re, new EventMatcher(NINALogEvent.NINA_PLATESOLVE_FAILED, false, PlateSolveFinished));
 
             return _matchers;
+        }
+
+        // With blind failover, ImageSolver.Solve calls itself when the solve with coordinates fails. That
+        // failure is only logged at Debug level; the blind solve logs its start and result, and the outer
+        // call then logs the same result again. Report the failure when the blind solve starts and drop
+        // the repeated result, so that every PLATESOLVE-START is followed by exactly one result.
+        private NINALogEvent PlateSolveStarted(EventMatcher eventMatcher, string msg, DateTime dateTime, Match match)
+        {
+            bool hasCoordinates = msg.Contains("Reference Coordinates");
+            resultEchoPending = solveOpen && openSolveCanFailOver && !hasCoordinates;
+            if (resultEchoPending)
+            {
+                onNINALogEvent(new NINALogEvent(NINALogEvent.NINA_PLATESOLVE_FAILED, dateTime));
+            }
+            solveOpen = true;
+            openSolveCanFailOver = hasCoordinates && msg.Contains("BlindFailoverEnabled: True");
+            return new NINALogEvent(eventMatcher.eventType, dateTime);
+        }
+
+        private NINALogEvent PlateSolveFinished(EventMatcher eventMatcher, string msg, DateTime dateTime, Match match)
+        {
+            if (!solveOpen && resultEchoPending)
+            {
+                resultEchoPending = false;
+                return null;
+            }
+            solveOpen = false;
+            return new NINALogEvent(eventMatcher.eventType, dateTime);
         }
 
         private bool filterMessage(string line)
