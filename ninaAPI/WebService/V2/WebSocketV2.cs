@@ -108,9 +108,11 @@ namespace ninaAPI.WebService.V2
 
             response.Response = responseData;
 
-            // Deep clone using JSON serialization (BinaryFormatter is disabled in .NET 8)
+            // Copy the event as JSON, so later changes to the sent objects don't alter the history.
+            // Read it back with System.Text.Json because /event-history is written with it: nested
+            // objects read back by Newtonsoft would come out there as {"RA":[],...}.
             string json = JsonConvert.SerializeObject(responseData);
-            Hashtable eventTable = JsonConvert.DeserializeObject<Hashtable>(json);
+            Dictionary<string, object> eventTable = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
             eventTable.Add("Time", time);
             HttpResponse Event = new HttpResponse() { Type = HttpResponse.TypeSocket, Response = eventTable };
             AddEvent(Event);
