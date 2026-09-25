@@ -60,9 +60,19 @@ namespace ninaAPI.WebService.V2
         // Every goto issued through NINA, centering slews included. MOUNT-SLEW-START/STOP only see a slew an info poll
         // catches, which misses one that ends between two polls and all of them on a mount that doesn't report Slewing (OnStep)
         private readonly Func<object, MountSlewedEventArgs, Task> MountSlewedHandler = async (_, e) => await WebSocketV2.SendAndAddEvent("MOUNT-SLEWED", new Dictionary<string, object>() {
-            { "From", e.From },
-            { "To", e.To }
+            { "From", SlewCoordinates(e.From) },
+            { "To", SlewCoordinates(e.To) }
         });
+
+        // The fields of the websocket spec with the epoch as its name, instead of the whole Coordinates object
+        private static Dictionary<string, object> SlewCoordinates(Coordinates c) => c == null ? null : new Dictionary<string, object>() {
+            { "RA", c.RA },
+            { "RADegrees", c.RADegrees },
+            { "RAString", c.RAString },
+            { "Dec", c.Dec },
+            { "DecString", c.DecString },
+            { "Epoch", c.Epoch.ToString() }
+        };
 
         public void Dispose()
         {
