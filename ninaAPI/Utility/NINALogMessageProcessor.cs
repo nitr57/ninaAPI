@@ -9,7 +9,6 @@ namespace ninaAPI
 {
     public class NINALogMessageProcessor
     {
-        private static List<NINALogEvent> previousEvents = new List<NINALogEvent>();
         private Dictionary<Regex, EventMatcher> matchers;
 
         // Pairing of the plate solve lines, see PlateSolveStarted
@@ -65,7 +64,6 @@ namespace ninaAPI
 
         public void onNINALogEvent(NINALogEvent e)
         {
-            previousEvents.Add(e);
             Logger.Debug($"detected event for web viewer: {e.type}");
             NINALogEventSaved?.Invoke(this, e);
         }

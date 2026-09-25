@@ -33,7 +33,7 @@ namespace ninaAPI.WebService.V2
             try
             {
                 List<object> result = new List<object>();
-                foreach (HttpResponse r in WebSocketV2.Events)
+                foreach (HttpResponse r in WebSocketV2.GetEvents())
                 {
                     result.Add(r.Response);
                 }
@@ -108,12 +108,14 @@ namespace ninaAPI.WebService.V2
 
             response.Response = responseData;
 
-            // Deep clone using JSON serialization (BinaryFormatter is disabled in .NET 8)
+            // Copy the event as JSON, so later changes to the sent objects don't alter the history.
+            // Read it back with System.Text.Json because /event-history is written with it: nested
+            // objects read back by Newtonsoft would come out there as {"RA":[],...}.
             string json = JsonConvert.SerializeObject(responseData);
-            Hashtable eventTable = JsonConvert.DeserializeObject<Hashtable>(json);
+            Dictionary<string, object> eventTable = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(json);
             eventTable.Add("Time", time);
             HttpResponse Event = new HttpResponse() { Type = HttpResponse.TypeSocket, Response = eventTable };
-            Events.Add(Event);
+            AddEvent(Event);
 
             await SendEvent(response);
         }
@@ -122,7 +124,31 @@ namespace ninaAPI.WebService.V2
 
         public static void SetUnavailable() => instance = null;
 
-        public static List<HttpResponse> Events = new List<HttpResponse>();
+        // Every event since the API started; beyond this the oldest are dropped. Events arrive from
+        // the threads of NINA's mediators and the log watcher while /event-history reads them.
+        public const int MaxEvents = 10000;
+        private static readonly object eventsLock = new object();
+        private static readonly List<HttpResponse> events = new List<HttpResponse>();
+
+        public static void AddEvent(HttpResponse e)
+        {
+            lock (eventsLock)
+            {
+                events.Add(e);
+                if (events.Count > MaxEvents)
+                {
+                    events.RemoveRange(0, events.Count - MaxEvents);
+                }
+            }
+        }
+
+        public static List<HttpResponse> GetEvents()
+        {
+            lock (eventsLock)
+            {
+                return new List<HttpResponse>(events);
+            }
+        }
 
         protected override Task OnMessageReceivedAsync(IWebSocketContext context, byte[] rxBuffer, IWebSocketReceiveResult rxResult)
         {
