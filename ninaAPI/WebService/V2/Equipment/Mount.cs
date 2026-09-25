@@ -57,6 +57,22 @@ namespace ninaAPI.WebService.V2
         private readonly Func<object, EventArgs, Task> MountHomedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("MOUNT-HOMED");
         private readonly Func<object, EventArgs, Task> MountParkedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("MOUNT-PARKED");
         private readonly Func<object, EventArgs, Task> MountUnparkedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("MOUNT-UNPARKED");
+        // Every goto issued through NINA, centering slews included. MOUNT-SLEW-START/STOP only see a slew an info poll
+        // catches, which misses one that ends between two polls and all of them on a mount that doesn't report Slewing (OnStep)
+        private readonly Func<object, MountSlewedEventArgs, Task> MountSlewedHandler = async (_, e) => await WebSocketV2.SendAndAddEvent("MOUNT-SLEWED", new Dictionary<string, object>() {
+            { "From", SlewCoordinates(e.From) },
+            { "To", SlewCoordinates(e.To) }
+        });
+
+        // The fields of the websocket spec with the epoch as its name, instead of the whole Coordinates object
+        private static Dictionary<string, object> SlewCoordinates(Coordinates c) => c == null ? null : new Dictionary<string, object>() {
+            { "RA", c.RA },
+            { "RADegrees", c.RADegrees },
+            { "RAString", c.RAString },
+            { "Dec", c.Dec },
+            { "DecString", c.DecString },
+            { "Epoch", c.Epoch.ToString() }
+        };
 
         public void Dispose()
         {
@@ -72,6 +88,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Mount.Homed += MountHomedHandler;
             AdvancedAPI.Controls.Mount.Parked += MountParkedHandler;
             AdvancedAPI.Controls.Mount.Unparked += MountUnparkedHandler;
+            AdvancedAPI.Controls.Mount.Slewed += MountSlewedHandler;
             AdvancedAPI.Controls.Mount.RegisterConsumer(this);
         }
 
@@ -84,12 +101,41 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Mount.Homed -= MountHomedHandler;
             AdvancedAPI.Controls.Mount.Parked -= MountParkedHandler;
             AdvancedAPI.Controls.Mount.Unparked -= MountUnparkedHandler;
+            AdvancedAPI.Controls.Mount.Slewed -= MountSlewedHandler;
             AdvancedAPI.Controls.Mount.RemoveConsumer(this);
         }
+
+        // Null until the first update after connect, so an already tracking mount still gets its start event
+        private static bool? lastSlewing;
+        private static bool? lastTracking;
 
         public async void UpdateDeviceInfo(TelescopeInfo deviceInfo)
         {
             await WebSocketV2.SendConsumerEvent("MOUNT");
+
+            if (deviceInfo == null || !deviceInfo.Connected)
+            {
+                lastSlewing = null;
+                lastTracking = null;
+                return;
+            }
+
+            // Remember the new values before awaiting: the next update may arrive during a send
+            bool slewing = deviceInfo.Slewing;
+            bool tracking = deviceInfo.TrackingEnabled;
+            bool slewingChanged = slewing != (lastSlewing ?? false);
+            bool trackingChanged = tracking != (lastTracking ?? false);
+            lastSlewing = slewing;
+            lastTracking = tracking;
+
+            if (slewingChanged)
+            {
+                await WebSocketV2.SendAndAddEvent(slewing ? "MOUNT-SLEW-START" : "MOUNT-SLEW-STOP");
+            }
+            if (trackingChanged)
+            {
+                await WebSocketV2.SendAndAddEvent(tracking ? "MOUNT-TRACKING-START" : "MOUNT-TRACKING-STOP");
+            }
         }
     }
 

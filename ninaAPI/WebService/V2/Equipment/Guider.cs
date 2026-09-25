@@ -16,12 +16,14 @@ using NINA.Core.Interfaces;
 using NINA.Core.Utility;
 using NINA.Equipment.Equipment;
 using NINA.Equipment.Equipment.MyGuider;
+using NINA.Equipment.Equipment.MyGuider.PHD2.PhdEvents;
 using NINA.Equipment.Interfaces;
 using NINA.Equipment.Interfaces.Mediator;
 using NINA.Equipment.Interfaces.ViewModel;
 using ninaAPI.Utility;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -80,9 +82,123 @@ namespace ninaAPI.WebService.V2
         public double DECDuration { get; set; }
     }
 
+    public class GuideStepHistoryEntry
+    {
+        // Counts up by one per step, the cursor of /equipment/guider/history. Unlike Time it
+        // cannot go back, e.g. when NTP or GPS sets the clock of a Pi without RTC mid-session.
+        public long Id { get; set; }
+        // UTC
+        public DateTime Time { get; set; }
+        public double RADistanceRaw { get; set; }
+        public double DECDistanceRaw { get; set; }
+        public double RADuration { get; set; }
+        public double DECDuration { get; set; }
+        // Only reported by PHD2
+        public double? SNR { get; set; }
+        public double? StarMass { get; set; }
+        public double? HFD { get; set; }
+
+        public static GuideStepHistoryEntry FromStep(IGuideStep step)
+        {
+            var phd = step as PhdEventGuideStep;
+            return new GuideStepHistoryEntry()
+            {
+                Time = DateTime.UtcNow,
+                RADistanceRaw = step.RADistanceRaw,
+                DECDistanceRaw = step.DECDistanceRaw,
+                RADuration = step.RADuration,
+                DECDuration = step.DECDuration,
+                SNR = phd?.SNR,
+                StarMass = phd?.StarMass,
+                HFD = phd?.HFD,
+            };
+        }
+    }
+
+    public class GuideStepHistoryResponse
+    {
+        public string Session { get; set; }
+        public double PixelScale { get; set; }
+        public int Count { get; set; }
+        public int MaxSize { get; set; }
+        public List<GuideStepHistoryEntry> Steps { get; set; }
+    }
+
     public class GuiderWatcher : INinaWatcher, IGuiderConsumer
     {
         public static GuideStep lastGuideStep { get; set; }
+
+        // Every guide step since the API started; beyond this the oldest are dropped (~14 h at 1 step/s).
+        public const int MaxHistorySize = 50000;
+        // A new value whenever NINA starts, which starts the step ids over
+        public static readonly string HistorySession = Guid.NewGuid().ToString();
+        private static readonly object historyLock = new object();
+        private static readonly List<GuideStepHistoryEntry> history = new List<GuideStepHistoryEntry>();
+        private static long lastHistoryId;
+
+        private static INotifyPropertyChanged observedGuider;
+        private static string lastState;
+
+        private static void AddHistoryEntry(GuideStepHistoryEntry entry)
+        {
+            lock (historyLock)
+            {
+                entry.Id = ++lastHistoryId;
+                history.Add(entry);
+                if (history.Count > MaxHistorySize)
+                {
+                    history.RemoveRange(0, history.Count - MaxHistorySize);
+                }
+            }
+        }
+
+        public static List<GuideStepHistoryEntry> GetHistory(long afterId, out int total)
+        {
+            lock (historyLock)
+            {
+                total = history.Count;
+                // The ids are consecutive, so the first entry after the cursor is at a known offset
+                int start = history.Count == 0 ? 0 : (int)Math.Clamp(afterId - history[0].Id + 1, 0, history.Count);
+                return history.GetRange(start, history.Count - start);
+            }
+        }
+
+        // The guider state (PHD2 app state) is only observable on the device itself:
+        // neither GuiderInfo nor the mediator events report Paused, LostLock or Stopped.
+        private static void ObserveGuider()
+        {
+            var device = AdvancedAPI.Controls.Guider.GetDevice() as INotifyPropertyChanged;
+            if (ReferenceEquals(device, observedGuider))
+            {
+                return;
+            }
+            if (observedGuider != null)
+            {
+                observedGuider.PropertyChanged -= GuiderPropertyChanged;
+            }
+            observedGuider = device;
+            lastState = null;
+            if (device != null)
+            {
+                device.PropertyChanged += GuiderPropertyChanged;
+                GuiderPropertyChanged(device, new PropertyChangedEventArgs(nameof(IGuider.State)));
+            }
+        }
+
+        private static async void GuiderPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(IGuider.State))
+            {
+                return;
+            }
+            string state = (sender as IGuider)?.State;
+            if (string.IsNullOrEmpty(state) || state == lastState)
+            {
+                return;
+            }
+            lastState = state;
+            await WebSocketV2.SendAndAddEvent("GUIDER-STATE", new Dictionary<string, object>() { { "State", state } });
+        }
 
         private readonly Func<object, EventArgs, Task> GuiderConnectedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("GUIDER-CONNECTED");
         private readonly Func<object, EventArgs, Task> GuiderDisconnectedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("GUIDER-DISCONNECTED");
@@ -92,6 +208,7 @@ namespace ninaAPI.WebService.V2
         private readonly EventHandler<IGuideStep> GuiderGuideEventHandler = (object sender, IGuideStep e) =>
         {
             lastGuideStep = new GuideStep() { DECDistanceRaw = e.DECDistanceRaw, DECDuration = e.DECDuration, RADistanceRaw = e.RADistanceRaw, RADuration = e.RADuration };
+            AddHistoryEntry(GuideStepHistoryEntry.FromStep(e));
         };
 
         public void StartWatchers()
@@ -103,6 +220,7 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Guider.GuidingStarted += GuiderStartHandler;
             AdvancedAPI.Controls.Guider.GuidingStopped += GuiderStopHandler;
             AdvancedAPI.Controls.Guider.RegisterConsumer(this);
+            ObserveGuider();
         }
 
         public void StopWatchers()
@@ -114,10 +232,23 @@ namespace ninaAPI.WebService.V2
             AdvancedAPI.Controls.Guider.GuidingStarted -= GuiderStartHandler;
             AdvancedAPI.Controls.Guider.GuidingStopped -= GuiderStopHandler;
             AdvancedAPI.Controls.Guider.RemoveConsumer(this);
+            if (observedGuider != null)
+            {
+                observedGuider.PropertyChanged -= GuiderPropertyChanged;
+                observedGuider = null;
+            }
         }
 
         public async void UpdateDeviceInfo(GuiderInfo deviceInfo)
         {
+            if (deviceInfo?.Connected != true)
+            {
+                // A reconnect may bring back the same guider object in the same state,
+                // which is still news after the disconnect
+                lastState = null;
+            }
+            // Broadcast on connect and disconnect, which is when the device changes
+            ObserveGuider();
             await WebSocketV2.SendConsumerEvent("GUIDER");
         }
 
@@ -259,6 +390,40 @@ namespace ninaAPI.WebService.V2
 
                 GuideStepsHistory history = (GuideStepsHistory)guiderProperty.GetValue(gvm);
                 response.Response = history;
+            }
+            catch (Exception ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(CommonErrors.UNKNOWN_ERROR);
+            }
+
+            HttpContext.WriteToResponse(response);
+        }
+
+        [Route(HttpVerbs.Get, "/equipment/guider/history")]
+        public void GuiderHistory([QueryField] long after)
+        {
+            HttpResponse response = new HttpResponse();
+
+            try
+            {
+                List<GuideStepHistoryEntry> steps = GuiderWatcher.GetHistory(after, out int total);
+
+                double pixelScale = 0;
+                try
+                {
+                    pixelScale = AdvancedAPI.Controls.Guider.GetInfo().PixelScale;
+                }
+                catch (Exception) { }
+
+                response.Response = new GuideStepHistoryResponse()
+                {
+                    Session = GuiderWatcher.HistorySession,
+                    PixelScale = pixelScale,
+                    Count = total,
+                    MaxSize = GuiderWatcher.MaxHistorySize,
+                    Steps = steps,
+                };
             }
             catch (Exception ex)
             {

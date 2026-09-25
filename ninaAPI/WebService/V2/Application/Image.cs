@@ -81,6 +81,7 @@ namespace ninaAPI.WebService.V2
         // Set by the delete action. The entry itself stays in the history because
         // indices and thumbnails are positional; clients hide flagged entries.
         public bool IsDeleted { get; set; }
+        public int? FocuserPosition { get; set; }
         public string Filename { get => Path?.IsFile == true ? System.IO.Path.GetFileName(Path.LocalPath) : null; }
 
         private Uri Path { get; set; }
@@ -114,6 +115,7 @@ namespace ninaAPI.WebService.V2
                 Max = e.Statistics.Max,
                 Path = e.PathToImage,
                 IsBayered = e.IsBayered,
+                FocuserPosition = e.MetaData.Focuser?.Position,
             };
         }
 
