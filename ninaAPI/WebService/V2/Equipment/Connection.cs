@@ -279,6 +279,15 @@ namespace ninaAPI.WebService.V2
                     chooser = cam.DeviceChooserVM;
                     handler = cam;
                     break;
+                case "guidecamera":
+                    if (AdvancedAPI.Controls.GuideCamera == null)
+                    {
+                        break;
+                    }
+                    var guideCam = (CameraVM)typeof(CameraMediator).GetField("handler", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(AdvancedAPI.Controls.GuideCamera);
+                    chooser = guideCam.DeviceChooserVM;
+                    handler = guideCam;
+                    break;
                 case "dome":
                     var dome = (DomeVM)typeof(DomeMediator).GetField("handler", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(AdvancedAPI.Controls.Dome);
                     chooser = dome.DeviceChooserVM;

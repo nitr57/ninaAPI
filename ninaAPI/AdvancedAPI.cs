@@ -83,7 +83,8 @@ namespace ninaAPI
                            ITwilightCalculator twilightCalculator,
                            INighttimeCalculator nighttimeCalculator,
                            IWindowServiceFactory windowFactory,
-                           ISymbolBroker symbolBroker)
+                           ISymbolBroker symbolBroker,
+                           [Import(AllowDefault = true)] IGuideCameraMediator guideCamera)
         {
 #if WINDOWS
             Application.Current.Resources.MergedDictionaries.Add(new ResourceDictionary() { Source = new Uri("pack://application:,,,/ninaAPI;component/WebService/V2/CustomDrivers/RotatorDataTemplate.xaml") });
@@ -93,6 +94,7 @@ namespace ninaAPI
 
             Controls = new NINAControls() {
                 Camera = camera,
+                GuideCamera = guideCamera,
                 Mount = telescope,
                 Focuser = focuser,
                 FilterWheel = filterWheel,

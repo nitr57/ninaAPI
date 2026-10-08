@@ -29,6 +29,8 @@ namespace ninaAPI
     {
         #region Equipment
         public ICameraMediator Camera;
+        /// <summary>pins: the guide camera slot; null on a host without one.</summary>
+        public IGuideCameraMediator GuideCamera;
         public ITelescopeMediator Mount;
         public IFocuserMediator Focuser;
         public IFilterWheelMediator FilterWheel;
