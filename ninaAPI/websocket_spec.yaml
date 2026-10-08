@@ -55,6 +55,9 @@ channels:
                         - FOCUSER-CONNECTED
                         - FOCUSER-DISCONNECTED
                         - FOCUSER-USER-FOCUSED
+                        - GUIDECAMERA-CONNECTED
+                        - GUIDECAMERA-DISCONNECTED
+                        - GUIDECAMERA-DOWNLOAD-TIMEOUT
                         - GUIDER-CONNECTED
                         - GUIDER-DISCONNECTED
                         - GUIDER-START

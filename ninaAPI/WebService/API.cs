@@ -61,6 +61,7 @@ namespace ninaAPI.WebService
         public static void StartWatchers()
         {
             Watchers.Add(new CameraWatcher());
+            Watchers.Add(new GuideCameraWatcher());
             Watchers.Add(new DomeWatcher());
             Watchers.Add(new FilterWheelWatcher());
             Watchers.Add(new FlatDeviceWatcher());

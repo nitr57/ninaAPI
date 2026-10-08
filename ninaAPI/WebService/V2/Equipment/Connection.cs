@@ -60,7 +60,7 @@ namespace ninaAPI.WebService.V2
 
                 GuideInfo guiderInfo = new GuideInfo(guider.GetInfo(), GuiderWatcher.lastGuideStep, g?.State);
 
-                response.Response = new Dictionary<string, object>()
+                var equipment = new Dictionary<string, object>()
                 {
                     { "Camera", CameraInfoResponse.FromCam(AdvancedAPI.Controls.Camera) },
                     { "Dome", new ExtendedDomeInfo(AdvancedAPI.Controls.Dome.GetInfo(), AdvancedAPI.Controls.DomeFollower) },
@@ -74,6 +74,11 @@ namespace ninaAPI.WebService.V2
                     { "Switch", AdvancedAPI.Controls.Switch.GetInfo() },
                     { "WeatherData", AdvancedAPI.Controls.Weather.GetInfo() },
                 };
+                if (AdvancedAPI.Controls.GuideCamera != null)
+                {
+                    equipment["GuideCamera"] = CameraInfoResponse.FromCam(AdvancedAPI.Controls.GuideCamera);
+                }
+                response.Response = equipment;
             }
             catch (Exception ex)
             {

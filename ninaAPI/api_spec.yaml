@@ -153,6 +153,10 @@ paths:
                     properties:
                       Camera:
                         $ref: "#/components/schemas/CameraInfo"
+                      GuideCamera:
+                        description: The guide camera; missing when this pins has no guide camera slot.
+                        allOf:
+                          - $ref: "#/components/schemas/CameraInfo"
                       Dome:
                         $ref: "#/components/schemas/DomeInfo"
                       FilterWheel:
@@ -1263,6 +1267,908 @@ paths:
                   Type:
                     type: string
                     example: "API"
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/info:
+    get:
+      tags:
+        - Guide Camera
+      summary: Information
+      description: This endpoint returns relevant information about the guide camera.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    $ref: "#/components/schemas/CameraInfo"
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/connect:
+    get:
+      tags:
+        - Guide Camera
+      summary: Connect
+      description: Connect to the guide camera
+      parameters:
+        - in: query
+          name: to
+          required: false
+          description: The Id of the device that should be connected.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: Connected
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/disconnect:
+    get:
+      tags:
+        - Guide Camera
+      summary: Disconnect
+      description: This endpoint disconnects the guide camera.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: Disconnected
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/list-devices:
+    get:
+      tags:
+        - Guide Camera
+      summary: List Devices
+      description: List all devices which can be connected
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceList"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/rescan:
+    get:
+      tags:
+        - Guide Camera
+      summary: Rescan Devices
+      description: Rescans for new devices, and returns a list of all available devices
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceList"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/set-readout:
+    get:
+      tags:
+        - Guide Camera
+      summary: Set readout mode
+      description: This endpoint sets the readout mode of the guide camera.
+      parameters:
+        - in: query
+          name: mode
+          description: The readout mode to set.
+          schema:
+            type: integer
+            minimum: 0
+          required: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: Readout mode updated
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "400":
+          description: Invalid readout mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    example: Invalid readout mode
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/set-readout/image:
+    get:
+      tags:
+        - Guide Camera
+      summary: Set readout mode for normal images
+      description: This endpoint sets the readout mode for normal images.
+      parameters:
+        - in: query
+          name: mode
+          description: The readout mode to set.
+          schema:
+            type: integer
+            minimum: 0
+          required: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: Readout mode updated
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "400":
+          description: Invalid readout mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    example: Invalid readout mode
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/set-readout/snapshot:
+    get:
+      tags:
+        - Guide Camera
+      summary: Set readout mode for snapshots
+      description: This endpoint sets the readout mode for snapshots.
+      parameters:
+        - in: query
+          name: mode
+          description: The readout mode to set.
+          schema:
+            type: integer
+            minimum: 0
+          required: true
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: Readout mode updated
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "400":
+          description: Invalid readout mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    example: Invalid readout mode
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/cool:
+    get:
+      tags:
+        - Guide Camera
+      summary: Cooling
+      description: This endpoint cools the guide camera.
+      parameters:
+        - in: query
+          name: temperature
+          description: The temperature to cool the guide camera to.
+          required: true
+          schema:
+            type: number
+            format: double
+        - in: query
+          name: minutes
+          description: The minimum duration to cool the guide camera. -1 for default duration
+          required: true
+          schema:
+            type: number
+            format: double
+        - in: query
+          name: cancel
+          description: Whether to cancel the cooling process.
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    enum:
+                      - Cooling started
+                      - Cooling canceled
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "409":
+          description: Guide camera not connected / Guide camera has no temperature control
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    enum:
+                      - Guide camera not connected
+                      - Guide camera has no temperature control
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/warm:
+    get:
+      tags:
+        - Guide Camera
+      summary: Warming
+      description: This endpoint warms the guide camera.
+      parameters:
+        - in: query
+          name: minutes
+          description: The minimum duration to warm the guide camera. -1 for default duration
+          required: true
+          schema:
+            type: number
+            format: double
+        - in: query
+          name: cancel
+          description: Whether to cancel the warming process.
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    enum:
+                      - Warming started
+                      - Warming canceled
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "409":
+          description: Guide camera not connected / Guide camera has no temperature control
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    enum:
+                      - Guide camera not connected
+                      - Guide camera has no temperature control
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/abort-exposure:
+    get:
+      tags:
+        - Guide Camera
+      summary: Exposure Abort
+      description: This endpoint aborts the current exposure.
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    enum:
+                      - Exposure aborted
+                      - Camera not exposing
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "409":
+          description: Guide camera not connected / Camera not exposing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    enum:
+                      - Guide camera not connected
+                      - Camera not exposing
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/dew-heater:
+    get:
+      tags:
+        - Guide Camera
+      summary: Dew Heater Control
+      description: This endpoint sets the dew heater.
+      parameters:
+        - in: query
+          name: power
+          description: Whether to turn the dew heater on or off.
+          required: true
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: Dew heater set
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "409":
+          description: Guide camera not connected / Guide camera has no dew heater
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    enum:
+                      - Guide camera not connected
+                      - Guide camera has no dew heater
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/usb-limit:
+    get:
+      tags:
+        - Guide Camera
+      summary: Set USB limit
+      description: This endpoint sets the usb limit of the guide camera
+      parameters:
+        - in: query
+          name: limit
+          description: The USB limit. Has to be between USBLimitMin and USBLimitMax.
+          required: true
+          schema:
+            type: string
+            example: 2x2
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: USB limit set
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "409":
+          description: Guide camera not connected / USB limit cant be set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    enum:
+                      - Guide camera not connected
+                      - Guide camera can not set USB limit
+                      - USB limit out of range
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/set-binning:
+    get:
+      tags:
+        - Guide Camera
+      summary: Set Binning
+      description: This endpoint sets the binning of the guide camera, if the specified binning is supported
+      parameters:
+        - in: query
+          name: binning
+          description: The binning mode
+          required: true
+          schema:
+            type: string
+            example: 2x2
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: Binning set
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "409":
+          description: Guide camera not connected / Invalid binning mode
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: string
+                    example: ""
+                  Error:
+                    type: string
+                    enum:
+                      - Guide camera not connected
+                      - Invalid binning mode
+                      - Binning must be specified
+                  StatusCode:
+                    type: integer
+                    example: 409
+                  Success:
+                    type: boolean
+                    example: false
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "500":
+          description: Internal server error, Unknown error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnknownError"
+
+  /equipment/guidecamera/capture:
+    get:
+      tags:
+        - Guide Camera
+      summary: Capture
+      description: Takes one exposure with the guide camera and returns it, e.g. to focus or frame the guide camera. It waits for the exposure and returns the image. The image isn't saved, added to the image history or plate solved, and the imaging camera's last capture stays as it is. Returns 409 while the guide camera is exposing or a guider holds it.
+      parameters:
+        - in: query
+          name: duration
+          description: The exposure time in seconds. 1 if omitted.
+          required: false
+          schema:
+            type: number
+            format: double
+        - in: query
+          name: gain
+          description: The gain to use for the exposure. If omitted, the guide camera's default gain will be used.
+          required: false
+          schema:
+            type: number
+            format: int32
+        - in: query
+          name: resize
+          description: Whether to resize the image.
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: size
+          description: The size of the resized image, e.g. 640x480 (the default when resize is set).
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: scale
+          description: Scales the image by this factor instead of resizing it to size, when resize is set.
+          required: false
+          schema:
+            type: number
+            format: double
+        - in: query
+          name: quality
+          description: JPEG quality from 1 to 100. If omitted the image is a PNG.
+          required: false
+          schema:
+            type: number
+            format: int32
+        - in: query
+          name: stream
+          description: Return the image itself instead of base64 in JSON.
+          required: false
+          schema:
+            type: boolean
+        - in: query
+          name: skipAutoStretch
+          description: Return the image unstretched. By default it is stretched with the profile's auto-stretch settings.
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Successful response (with stream, the image itself)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Response:
+                    type: object
+                    properties:
+                      Image:
+                        type: string
+                        description: The image, base64 encoded
+                  Error:
+                    type: string
+                    example: ""
+                  StatusCode:
+                    type: integer
+                    example: 200
+                  Success:
+                    type: boolean
+                    example: true
+                  Type:
+                    type: string
+                    example: "API"
+        "404":
+          description: This pins has no guide camera slot
+        "409":
+          description: Guide camera not connected / Guide camera is busy
         "500":
           description: Internal server error, Unknown error
           content:
@@ -10452,6 +11358,9 @@ components:
                   type: integer
                 HorizonFilePath:
                   type: string
+            GuideCameraSettings:
+              type: object
+              description: The guide camera's settings, with the same fields as CameraSettings.
             CameraSettings:
               type: object
               properties:

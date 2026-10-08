@@ -126,6 +126,31 @@ namespace ninaAPI.WebService.V2
         public bool AtTargetTemp { get; set; }
     }
 
+    /// <summary>
+    /// pins: the camera slot an endpoint works on. The /equipment/camera and /equipment/guidecamera routes share
+    /// their handlers; the guide camera slot is missing on a host without one.
+    /// </summary>
+    internal sealed class CameraEndpoint
+    {
+        public static readonly CameraEndpoint Imaging = new("Camera", () => AdvancedAPI.Controls.Camera, p => p.CameraSettings);
+        public static readonly CameraEndpoint Guide = new("Guide camera", () => AdvancedAPI.Controls.GuideCamera, p => p.GuideCameraSettings);
+
+        private readonly Func<ICameraMediator> mediator;
+        private readonly Func<IProfile, ICameraSettings> settings;
+
+        private CameraEndpoint(string name, Func<ICameraMediator> mediator, Func<IProfile, ICameraSettings> settings)
+        {
+            Name = name;
+            this.mediator = mediator;
+            this.settings = settings;
+        }
+
+        public string Name { get; }
+        public ICameraMediator Mediator => mediator();
+        public ICameraSettings Settings => settings(AdvancedAPI.Controls.Profile.ActiveProfile);
+        public CancellationTokenSource CoolToken { get; set; }
+    }
+
     public class CameraWatcher : INinaWatcher, ICameraConsumer
     {
         private readonly Func<object, EventArgs, Task> CameraConnectedHandler = async (_, _) => await WebSocketV2.SendAndAddEvent("CAMERA-CONNECTED");
@@ -192,17 +217,25 @@ namespace ninaAPI.WebService.V2
         private static Task CaptureTask;
         internal static Dictionary<string, object> lastCaptureStatistics;
 
-        private static CancellationTokenSource CameraCoolToken;
-
-
         [Route(HttpVerbs.Get, "/equipment/camera/info")]
-        public void CameraInfo()
+        public void CameraInfo() => InfoFor(CameraEndpoint.Imaging);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/info")]
+        public void GuideCameraInfo() => InfoFor(CameraEndpoint.Guide);
+
+        private void InfoFor(CameraEndpoint endpoint)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
                 CameraInfoResponse info = CameraInfoResponse.FromCam(cam);
                 response.Response = info;
             }
@@ -216,13 +249,24 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/set-readout")]
-        public void CameraSetReadout([QueryField] short mode)
+        public void CameraSetReadout([QueryField] short mode) => SetReadoutFor(CameraEndpoint.Imaging, mode);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/set-readout")]
+        public void GuideCameraSetReadout([QueryField] short mode) => SetReadoutFor(CameraEndpoint.Guide, mode);
+
+        private void SetReadoutFor(CameraEndpoint endpoint, short mode)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (mode >= 0 && mode < cam.GetInfo().ReadoutModes.Count())
                 {
@@ -244,13 +288,24 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/set-readout/image")]
-        public void CameraSetReadoutImage([QueryField] short mode)
+        public void CameraSetReadoutImage([QueryField] short mode) => SetReadoutImageFor(CameraEndpoint.Imaging, mode);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/set-readout/image")]
+        public void GuideCameraSetReadoutImage([QueryField] short mode) => SetReadoutImageFor(CameraEndpoint.Guide, mode);
+
+        private void SetReadoutImageFor(CameraEndpoint endpoint, short mode)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (mode >= 0 && mode < cam.GetInfo().ReadoutModes.Count())
                 {
@@ -272,13 +327,24 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/set-readout/snapshot")]
-        public void CameraSetReadoutSnapshot([QueryField] short mode)
+        public void CameraSetReadoutSnapshot([QueryField] short mode) => SetReadoutSnapshotFor(CameraEndpoint.Imaging, mode);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/set-readout/snapshot")]
+        public void GuideCameraSetReadoutSnapshot([QueryField] short mode) => SetReadoutSnapshotFor(CameraEndpoint.Guide, mode);
+
+        private void SetReadoutSnapshotFor(CameraEndpoint endpoint, short mode)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (mode >= 0 && mode < cam.GetInfo().ReadoutModes.Count())
                 {
@@ -300,34 +366,45 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/cool")]
-        public void CameraCool([QueryField] double temperature, [QueryField] bool cancel, [QueryField] double minutes)
+        public void CameraCool([QueryField] double temperature, [QueryField] bool cancel, [QueryField] double minutes) => CoolFor(CameraEndpoint.Imaging, temperature, cancel, minutes);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/cool")]
+        public void GuideCameraCool([QueryField] double temperature, [QueryField] bool cancel, [QueryField] double minutes) => CoolFor(CameraEndpoint.Guide, temperature, cancel, minutes);
+
+        private void CoolFor(CameraEndpoint endpoint, double temperature, bool cancel, double minutes)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (!cam.GetInfo().Connected)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera not connected", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not connected", 409));
                 }
                 else if (!cam.GetInfo().CanSetTemperature)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera has no temperature control", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} has no temperature control", 409));
                 }
                 else
                 {
                     if (cancel)
                     {
-                        CameraCoolToken?.Cancel();
+                        endpoint.CoolToken?.Cancel();
                         response.Response = "Cooling canceled";
                     }
                     else
                     {
-                        CameraCoolToken?.Cancel();
-                        CameraCoolToken = new CancellationTokenSource();
-                        cam.CoolCamera(temperature, TimeSpan.FromMinutes(minutes == -1 ? AdvancedAPI.Controls.Profile.ActiveProfile.CameraSettings.CoolingDuration : minutes), AdvancedAPI.Controls.StatusMediator.GetStatus(), CameraCoolToken.Token);
+                        endpoint.CoolToken?.Cancel();
+                        endpoint.CoolToken = new CancellationTokenSource();
+                        cam.CoolCamera(temperature, TimeSpan.FromMinutes(minutes == -1 ? endpoint.Settings.CoolingDuration : minutes), AdvancedAPI.Controls.StatusMediator.GetStatus(), endpoint.CoolToken.Token);
                         response.Response = "Cooling started";
                     }
                 }
@@ -342,34 +419,45 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/warm")]
-        public void CameraWarm([QueryField] bool cancel, [QueryField] double minutes)
+        public void CameraWarm([QueryField] bool cancel, [QueryField] double minutes) => WarmFor(CameraEndpoint.Imaging, cancel, minutes);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/warm")]
+        public void GuideCameraWarm([QueryField] bool cancel, [QueryField] double minutes) => WarmFor(CameraEndpoint.Guide, cancel, minutes);
+
+        private void WarmFor(CameraEndpoint endpoint, bool cancel, double minutes)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (!cam.GetInfo().Connected)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera not connected", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not connected", 409));
                 }
                 else if (!cam.GetInfo().CanSetTemperature)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera has no temperature control", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} has no temperature control", 409));
                 }
                 else
                 {
                     if (cancel)
                     {
-                        CameraCoolToken?.Cancel();
+                        endpoint.CoolToken?.Cancel();
                         response.Response = "Warming canceled";
                     }
                     else
                     {
-                        CameraCoolToken?.Cancel();
-                        CameraCoolToken = new CancellationTokenSource();
-                        cam.WarmCamera(TimeSpan.FromMinutes(minutes == -1 ? AdvancedAPI.Controls.Profile.ActiveProfile.CameraSettings.WarmingDuration : minutes), AdvancedAPI.Controls.StatusMediator.GetStatus(), CameraCoolToken.Token);
+                        endpoint.CoolToken?.Cancel();
+                        endpoint.CoolToken = new CancellationTokenSource();
+                        cam.WarmCamera(TimeSpan.FromMinutes(minutes == -1 ? endpoint.Settings.WarmingDuration : minutes), AdvancedAPI.Controls.StatusMediator.GetStatus(), endpoint.CoolToken.Token);
                         response.Response = "Warming started";
                     }
                 }
@@ -384,17 +472,28 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/abort-exposure")]
-        public void AbortExposure()
+        public void AbortExposure() => AbortExposureFor(CameraEndpoint.Imaging);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/abort-exposure")]
+        public void GuideAbortExposure() => AbortExposureFor(CameraEndpoint.Guide);
+
+        private void AbortExposureFor(CameraEndpoint endpoint)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (!cam.GetInfo().Connected)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera not connected", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not connected", 409));
                 }
                 else if (cam.GetInfo().IsExposing)
                 {
@@ -416,21 +515,32 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/dew-heater")]
-        public void CameraDewHeater([QueryField] bool power)
+        public void CameraDewHeater([QueryField] bool power) => DewHeaterFor(CameraEndpoint.Imaging, power);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/dew-heater")]
+        public void GuideCameraDewHeater([QueryField] bool power) => DewHeaterFor(CameraEndpoint.Guide, power);
+
+        private void DewHeaterFor(CameraEndpoint endpoint, bool power)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (!cam.GetInfo().Connected)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera not connected", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not connected", 409));
                 }
                 else if (!cam.GetInfo().HasDewHeater)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera has no dew heater", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} has no dew heater", 409));
                 }
                 else
                 {
@@ -448,21 +558,32 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/usb-limit")]
-        public void CameraDewHeater([QueryField] int limit)
+        public void CameraDewHeater([QueryField] int limit) => UsbLimitFor(CameraEndpoint.Imaging, limit);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/usb-limit")]
+        public void GuideCameraDewHeater([QueryField] int limit) => UsbLimitFor(CameraEndpoint.Guide, limit);
+
+        private void UsbLimitFor(CameraEndpoint endpoint, int limit)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (!cam.GetInfo().Connected)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera not connected", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not connected", 409));
                 }
                 else if (!cam.GetInfo().CanSetUSBLimit)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera can not set USB limit", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} can not set USB limit", 409));
                 }
                 else if (limit < cam.GetInfo().USBLimitMin || limit > cam.GetInfo().USBLimitMax)
                 {
@@ -484,13 +605,24 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/set-binning")]
-        public void CameraSetBinning([QueryField] string binning)
+        public void CameraSetBinning([QueryField] string binning) => SetBinningFor(CameraEndpoint.Imaging, binning);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/set-binning")]
+        public void GuideCameraSetBinning([QueryField] string binning) => SetBinningFor(CameraEndpoint.Guide, binning);
+
+        private void SetBinningFor(CameraEndpoint endpoint, string binning)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                ICameraMediator cam = AdvancedAPI.Controls.Camera;
+                ICameraMediator cam = endpoint.Mediator;
 
                 if (string.IsNullOrEmpty(binning))
                 {
@@ -498,7 +630,7 @@ namespace ninaAPI.WebService.V2
                 }
                 else if (!cam.GetInfo().Connected)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera not connected", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not connected", 409));
                 }
                 else if (binning.Contains('x'))
                 {
@@ -864,16 +996,27 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/get-settings")]
-        public void CameraGetSettings()
+        public void CameraGetSettings() => GetSettingsFor(CameraEndpoint.Imaging);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/get-settings")]
+        public void GuideCameraGetSettings() => GetSettingsFor(CameraEndpoint.Guide);
+
+        private void GetSettingsFor(CameraEndpoint endpoint)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
             {
-                var device = AdvancedAPI.Controls.Camera.GetDevice();
+                var device = endpoint.Mediator.GetDevice();
                 if (device == null)
                 {
-                    response = CoreUtility.CreateErrorTable(new Error("Camera device not available", 409));
+                    response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} device not available", 409));
                 }
                 else
                 {
@@ -903,8 +1046,19 @@ namespace ninaAPI.WebService.V2
         }
 
         [Route(HttpVerbs.Get, "/equipment/camera/set-setting")]
-        public void CameraSetSetting([QueryField] string settingName, [QueryField] string newValue)
+        public void CameraSetSetting([QueryField] string settingName, [QueryField] string newValue) => SetSettingFor(CameraEndpoint.Imaging, settingName, newValue);
+
+        [Route(HttpVerbs.Get, "/equipment/guidecamera/set-setting")]
+        public void GuideCameraSetSetting([QueryField] string settingName, [QueryField] string newValue) => SetSettingFor(CameraEndpoint.Guide, settingName, newValue);
+
+        private void SetSettingFor(CameraEndpoint endpoint, string settingName, string newValue)
         {
+            if (endpoint.Mediator == null)
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
@@ -919,10 +1073,10 @@ namespace ninaAPI.WebService.V2
                 }
                 else
                 {
-                    var device = AdvancedAPI.Controls.Camera.GetDevice();
+                    var device = endpoint.Mediator.GetDevice();
                     if (device == null)
                     {
-                        response = CoreUtility.CreateErrorTable(new Error("Camera device not available", 409));
+                        response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} device not available", 409));
                     }
                     else
                     {

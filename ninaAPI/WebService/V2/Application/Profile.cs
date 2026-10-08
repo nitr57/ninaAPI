@@ -75,6 +75,7 @@ namespace ninaAPI.WebService.V2
                 ApplicationSettings = CustomAppSettings.FromAppSettings(profile.ApplicationSettings),
                 AstrometrySettings = profile.AstrometrySettings,
                 CameraSettings = profile.CameraSettings,
+                GuideCameraSettings = profile.GuideCameraSettings,
                 ColorSchemaSettings = CustomColorSchemeSettings.FromColorSchemeSettings(profile.ColorSchemaSettings),
                 DomeSettings = profile.DomeSettings,
                 FilterWheelSettings = profile.FilterWheelSettings,
@@ -108,6 +109,7 @@ namespace ninaAPI.WebService.V2
         public CustomAppSettings ApplicationSettings { get; set; }
         public IAstrometrySettings AstrometrySettings { get; set; }
         public ICameraSettings CameraSettings { get; set; }
+        public ICameraSettings GuideCameraSettings { get; set; }
         public CustomColorSchemeSettings ColorSchemaSettings { get; set; }
         public IDomeSettings DomeSettings { get; set; }
         public IFilterWheelSettings FilterWheelSettings { get; set; }
