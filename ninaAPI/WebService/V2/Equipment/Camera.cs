@@ -257,6 +257,9 @@ namespace ninaAPI.WebService.V2
             return endpoint == CameraEndpoint.Guide && !endpoint.Mediator.IsFreeToCapture(guideCameraCaptureOwner);
         }
 
+        /// <summary>pins: the device settings that break a running guide frame, refused by set-setting like set-binning and set-readout.</summary>
+        private static readonly HashSet<string> SettingsThatBreakAGuideFrame = new(StringComparer.Ordinal) { "BinX", "BinY", "ReadoutMode" };
+
         [Route(HttpVerbs.Get, "/equipment/camera/set-readout")]
         public void CameraSetReadout([QueryField] short mode) => SetReadoutFor(CameraEndpoint.Imaging, mode);
 
@@ -1123,6 +1126,10 @@ namespace ninaAPI.WebService.V2
                         if (prop == null)
                         {
                             response = CoreUtility.CreateErrorTable(new Error($"Setting '{settingName}' not found", 400));
+                        }
+                        else if (SettingsThatBreakAGuideFrame.Contains(prop.Name) && GuideCameraInUseByGuider(endpoint))
+                        {
+                            response = CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} is in use by the guider", 409));
                         }
                         else
                         {
