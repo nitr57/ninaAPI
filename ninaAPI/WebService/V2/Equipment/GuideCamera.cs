@@ -101,7 +101,7 @@ namespace ninaAPI.WebService.V2
             [QueryField] bool skipAutoStretch)
         {
             HttpResponse response = new HttpResponse();
-            ICameraMediator cam = AdvancedAPI.Controls.GuideCamera;
+            IGuideCameraMediator cam = AdvancedAPI.Controls.GuideCamera;
 
             quality = Math.Clamp(quality, -1, 100);
             if (quality == 0)
@@ -120,20 +120,29 @@ namespace ninaAPI.WebService.V2
                 {
                     response = CoreUtility.CreateErrorTable(new Error("Guide camera not connected", 409));
                 }
-                else if (cam.GetInfo().IsExposing || !cam.IsFreeToCapture(guideCameraCaptureOwner))
+                // takes the capture block in one step: two requests (or a request and the guider) can't both start
+                else if (cam.GetInfo().IsExposing || !cam.TryRegisterCaptureBlock(guideCameraCaptureOwner))
                 {
                     response = CoreUtility.CreateErrorTable(new Error("Guide camera is busy", 409));
                 }
                 else
                 {
+                    IRenderedImage image;
+                    try
+                    {
+                        image = await CaptureGuideFrame(cam, duration > 0 ? duration : 1, HttpContext.IsParameterOmitted(nameof(gain)) ? -1 : gain, skipAutoStretch);
+                    }
+                    finally
+                    {
+                        cam.ReleaseCaptureBlock(guideCameraCaptureOwner);
+                    }
+
                     Size resolution = Size.Empty;
                     if (resize)
                     {
                         string[] s = size.Split('x');
                         resolution = new Size(int.Parse(s[0]), int.Parse(s[1]));
                     }
-
-                    IRenderedImage image = await CaptureGuideFrame(cam, duration > 0 ? duration : 1, HttpContext.IsParameterOmitted(nameof(gain)) ? -1 : gain, skipAutoStretch);
 
                     BitmapSource source = image.Image;
                     if (resize && scale == 0)
@@ -175,18 +184,9 @@ namespace ninaAPI.WebService.V2
             using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(duration + 120));
             IProgress<NINA.Core.Model.ApplicationStatus> progress = AdvancedAPI.Controls.StatusMediator.GetStatus();
 
-            cam.RegisterCaptureBlock(guideCameraCaptureOwner);
-            IImageData imageData;
-            try
-            {
-                await cam.Capture(sequence, timeout.Token, progress);
-                IExposureData exposure = await cam.Download(timeout.Token);
-                imageData = await exposure.ToImageData(progress, timeout.Token);
-            }
-            finally
-            {
-                cam.ReleaseCaptureBlock(guideCameraCaptureOwner);
-            }
+            await cam.Capture(sequence, timeout.Token, progress);
+            IExposureData exposure = await cam.Download(timeout.Token);
+            IImageData imageData = await exposure.ToImageData(progress, timeout.Token);
 
             IProfile profile = AdvancedAPI.Controls.Profile.ActiveProfile;
             IRenderedImage image = imageData.RenderImage();

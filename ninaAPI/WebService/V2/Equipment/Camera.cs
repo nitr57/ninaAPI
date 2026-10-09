@@ -248,6 +248,15 @@ namespace ninaAPI.WebService.V2
             HttpContext.WriteToResponse(response);
         }
 
+        /// <summary>
+        /// pins: true while something other than the API's own capture holds the guide camera's capture block, i.e. the
+        /// guider. Aborting its exposure or changing binning or readout mode under it would break a guide frame.
+        /// </summary>
+        private static bool GuideCameraInUseByGuider(CameraEndpoint endpoint)
+        {
+            return endpoint == CameraEndpoint.Guide && !endpoint.Mediator.IsFreeToCapture(guideCameraCaptureOwner);
+        }
+
         [Route(HttpVerbs.Get, "/equipment/camera/set-readout")]
         public void CameraSetReadout([QueryField] short mode) => SetReadoutFor(CameraEndpoint.Imaging, mode);
 
@@ -259,6 +268,12 @@ namespace ninaAPI.WebService.V2
             if (endpoint.Mediator == null)
             {
                 HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
+            if (GuideCameraInUseByGuider(endpoint))
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} is in use by the guider", 409)));
                 return;
             }
 
@@ -301,6 +316,12 @@ namespace ninaAPI.WebService.V2
                 return;
             }
 
+            if (GuideCameraInUseByGuider(endpoint))
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} is in use by the guider", 409)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
@@ -337,6 +358,12 @@ namespace ninaAPI.WebService.V2
             if (endpoint.Mediator == null)
             {
                 HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
+            if (GuideCameraInUseByGuider(endpoint))
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} is in use by the guider", 409)));
                 return;
             }
 
@@ -485,6 +512,12 @@ namespace ninaAPI.WebService.V2
                 return;
             }
 
+            if (GuideCameraInUseByGuider(endpoint))
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} is in use by the guider", 409)));
+                return;
+            }
+
             HttpResponse response = new HttpResponse();
 
             try
@@ -615,6 +648,12 @@ namespace ninaAPI.WebService.V2
             if (endpoint.Mediator == null)
             {
                 HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} not available", 404)));
+                return;
+            }
+
+            if (GuideCameraInUseByGuider(endpoint))
+            {
+                HttpContext.WriteToResponse(CoreUtility.CreateErrorTable(new Error($"{endpoint.Name} is in use by the guider", 409)));
                 return;
             }
 
