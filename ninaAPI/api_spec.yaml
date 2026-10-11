@@ -9922,6 +9922,16 @@ paths:
                         enum:
                           - Running
                           - Finished
+                      CurrentADU:
+                        type: number
+                        nullable: true
+                        description: Mean ADU of the last frame the flat routine measured, null while none is known.
+                        example: 8192
+                      BitDepth:
+                        type: integer
+                        nullable: true
+                        description: Bit depth of the image CurrentADU was measured on; its full scale is 2^BitDepth - 1. For RAW frames this can be below the camera's profile bit depth. Null while CurrentADU is null.
+                        example: 14
                   Error:
                     type: string
                     example: ""

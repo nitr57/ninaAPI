@@ -881,6 +881,13 @@ namespace ninaAPI.WebService.V2
         public int CompletedIterations { get; }
         public double? CurrentADU { get; }
 
+        /// <summary>
+        /// Bit depth of the image CurrentADU was measured on; its full scale is 2^BitDepth - 1.
+        /// This is the converted image's bit depth, which for RAW frames can be below the camera's
+        /// profile bit depth (e.g. 14 for a NEF while the profile says 16). Null while no ADU is known.
+        /// </summary>
+        public int? BitDepth { get; }
+
         public FlatStatusResponse(SequentialContainer container, Task task)
         {
             if (task is not null)
@@ -911,6 +918,17 @@ namespace ninaAPI.WebService.V2
             else if (container is AutoBrightnessFlat abf) rawADU = abf.DeterminedHistogramADU;
             else if (container is SkyFlat sf) rawADU = sf.DeterminedHistogramADU;
             CurrentADU = rawADU > 0 ? rawADU : (double?)null;
+
+            // The flat items prepare every measured frame before reading its statistics, so the last
+            // prepared image is the one DeterminedHistogramADU came from.
+            BitDepth = null;
+            if (CurrentADU is not null)
+            {
+                lock (ImageWatcher.imageLock)
+                {
+                    BitDepth = ImageWatcher.PreparedImage?.RawImageData?.Properties?.BitDepth;
+                }
+            }
         }
     }
 }
