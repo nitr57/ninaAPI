@@ -156,7 +156,7 @@ namespace ninaAPI.WebService.V2
                         HttpContext.Response.ContentType = quality == -1 ? "image/png" : "image/jpeg";
                         using MemoryStream memory = new MemoryStream();
                         encoder.Save(memory);
-                        await HttpContext.Response.OutputStream.WriteAsync(memory.ToArray());
+                        await HttpContext.Response.OutputStream.WriteAsync(memory.GetBuffer().AsMemory(0, (int)memory.Length));
                         return;
                     }
                     response.Response = new CaptureResponse() { Image = BitmapHelper.EncoderToBase64(encoder) };

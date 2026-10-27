@@ -181,7 +181,7 @@ namespace ninaAPI.WebService.V2
                     using (MemoryStream memory = new MemoryStream())
                     {
                         encoder.Save(memory);
-                        await HttpContext.Response.OutputStream.WriteAsync(memory.ToArray());
+                        await HttpContext.Response.OutputStream.WriteAsync(memory.GetBuffer().AsMemory(0, (int)memory.Length));
                         return;
                     }
                 }

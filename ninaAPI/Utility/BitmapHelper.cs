@@ -42,9 +42,19 @@ namespace ninaAPI.Utility
         {
             scale = Math.Clamp(scale, 0.1, 1);
 
-            source = new TransformedBitmap(source, new ScaleTransform(scale, scale));
+            // A scale of 1 would only copy the image; returning the source lets BitmapFrame share a frozen buffer
+            if (scale == 1)
+            {
+                return source;
+            }
 
-            return source;
+            var transformed = new TransformedBitmap(source, new ScaleTransform(scale, scale));
+            if (transformed.CanFreeze)
+            {
+                transformed.Freeze();
+            }
+
+            return transformed;
         }
 
         public static BitmapEncoder GetEncoder(BitmapSource source, int quality)
@@ -71,7 +81,7 @@ namespace ninaAPI.Utility
             using (MemoryStream memory = new MemoryStream())
             {
                 encoder.Save(memory);
-                return Convert.ToBase64String(memory.ToArray());
+                return Convert.ToBase64String(memory.GetBuffer(), 0, (int)memory.Length);
             }
         }
     }
