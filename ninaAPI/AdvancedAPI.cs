@@ -134,6 +134,8 @@ namespace ninaAPI
             PluginSettings = new PluginOptionsAccessor(Controls.Profile, Guid.Parse(this.Identifier));
             Controls.Profile.ProfileChanged += ProfileChanged;
 
+            DeleteStaleThumbnailFolders();
+
             UpdateDefaultPortCommand = new CommunityToolkit.Mvvm.Input.RelayCommand(() =>
             {
                 Port = CachedPort;
@@ -170,6 +172,60 @@ namespace ninaAPI
             if (CachedPort != Port)
             {
                 Notification.ShowInformation("Advanced API launched on a different port: " + CachedPort);
+            }
+        }
+
+        /// <summary>
+        /// Thumbnails go to a folder per process, which Teardown deletes. After an unclean exit (a crash,
+        /// a service restart, a power cut) the folder stays, so delete those of processes that no longer run.
+        /// </summary>
+        private static void DeleteStaleThumbnailFolders()
+        {
+            try
+            {
+                string pluginFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                foreach (string folder in Directory.EnumerateDirectories(pluginFolder, "thumbnails-*"))
+                {
+                    if (!int.TryParse(Path.GetFileName(folder)["thumbnails-".Length..], out int processId)
+                        || processId == Environment.ProcessId
+                        || IsProcessRunning(processId))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        Directory.Delete(folder, true);
+                        Logger.Info($"Deleted the thumbnails of an earlier session: {folder}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warning($"Could not delete the thumbnails of an earlier session {folder}: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warning($"Could not look for thumbnails of earlier sessions: {ex.Message}");
+            }
+        }
+
+        private static bool IsProcessRunning(int processId)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(processId);
+                return !process.HasExited;
+            }
+            catch (ArgumentException)
+            {
+                // No process with this id
+                return false;
+            }
+            catch (Exception)
+            {
+                // Can't tell, so keep its folder
+                return true;
             }
         }
 
