@@ -326,7 +326,9 @@ namespace ninaAPI.WebService.V2
                     return;
                 }
 
-                if (debayer || (autoPrepare && renderedImage.RawImageData.Properties.IsBayered))
+                // NINA already debayered the prepared image when the profile's DebayerImage is on; debayering it again garbles it
+                if (renderedImage is not IDebayeredImage
+                    && (debayer || (autoPrepare && renderedImage.RawImageData.Properties.IsBayered)))
                 {
                     try
                     {
