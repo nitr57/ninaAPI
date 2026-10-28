@@ -178,6 +178,7 @@ namespace ninaAPI
         /// <summary>
         /// Thumbnails go to a folder per process, which Teardown deletes. After an unclean exit (a crash,
         /// a service restart, a power cut) the folder stays, so delete those of processes that no longer run.
+        /// A folder with this process's id is one of those too: this session has not written to it yet.
         /// </summary>
         private static void DeleteStaleThumbnailFolders()
         {
@@ -187,8 +188,7 @@ namespace ninaAPI
                 foreach (string folder in Directory.EnumerateDirectories(pluginFolder, "thumbnails-*"))
                 {
                     if (!int.TryParse(Path.GetFileName(folder)["thumbnails-".Length..], out int processId)
-                        || processId == Environment.ProcessId
-                        || IsProcessRunning(processId))
+                        || (processId != Environment.ProcessId && IsProcessRunning(processId)))
                     {
                         continue;
                     }

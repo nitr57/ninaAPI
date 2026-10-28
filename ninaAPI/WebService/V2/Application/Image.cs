@@ -339,6 +339,14 @@ namespace ninaAPI.WebService.V2
                         Logger.Error(ex);
                     }
                 }
+
+                // NINA keeps the colour channels of its debayered image only for its profile's unlinked stretch;
+                // an unlinked stretch of the empty channels renders white
+                if (unlinked && renderedImage is IDebayeredImage debayeredImage && debayeredImage.DebayeredData?.Red is not { Length: > 0 })
+                {
+                    unlinked = false;
+                }
+
                 renderedImage = await renderedImage.Stretch(factor, blackClipping, unlinked);
 
                 BitmapEncoder encoder = null;
