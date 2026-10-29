@@ -210,12 +210,15 @@ namespace ninaAPI
             }
         }
 
+        // After a power cut the id can belong to another program by now (a daemon started at boot); its folder is
+        // stale all the same, so only a running process of this program keeps it
         private static bool IsProcessRunning(int processId)
         {
             try
             {
                 using var process = System.Diagnostics.Process.GetProcessById(processId);
-                return !process.HasExited;
+                using var current = System.Diagnostics.Process.GetCurrentProcess();
+                return !process.HasExited && process.ProcessName == current.ProcessName;
             }
             catch (ArgumentException)
             {

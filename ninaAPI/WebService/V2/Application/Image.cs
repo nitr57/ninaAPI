@@ -344,6 +344,7 @@ namespace ninaAPI.WebService.V2
                 // an unlinked stretch of the empty channels renders white
                 if (unlinked && renderedImage is IDebayeredImage debayeredImage && debayeredImage.DebayeredData?.Red is not { Length: > 0 })
                 {
+                    Logger.Debug("Prepared image: NINA kept no colour channels, so stretching linked instead of unlinked");
                     unlinked = false;
                 }
 
