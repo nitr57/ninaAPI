@@ -57,8 +57,13 @@ namespace ninaAPI.Utility
 
         public static ISequenceRootContainer GetSequenceRoot(this ISequenceMediator sequence)
         {
-            var navigation = (ISequenceNavigationVM)sequence.GetType().GetField("sequenceNavigation", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(sequence);
-            return navigation.Sequence2VM.Sequencer.MainContainer;
+            return sequence.GetSequenceNavigation().Sequence2VM.Sequencer.MainContainer;
+        }
+
+        /// <summary>The mediator's private navigation VM (pinned by NINA.Test's PluginReflectionContractsTest).</summary>
+        public static ISequenceNavigationVM GetSequenceNavigation(this ISequenceMediator sequence)
+        {
+            return (ISequenceNavigationVM)sequence.GetType().GetField("sequenceNavigation", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(sequence);
         }
 
         public static IList<IDeepSkyObjectContainer> GetAllTargets(this ISequenceMediator sequence)

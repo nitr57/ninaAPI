@@ -8497,7 +8497,7 @@ paths:
       tags:
         - Sequence
       summary: Load Sequence from file
-      description: Loads a sequence from a file from the default sequence folders, the names can be retrieved using the `sequence/list-available` endpoint
+      description: Loads a sequence from a file from the default sequence folders, the names can be retrieved using the `sequence/list-available` endpoint. Like NINA's own load, it clears the previous sequence's global user symbols first (they are restored when the load fails), wraps a saved target or template into a new sequence and validates the result.
       parameters:
         - name: sequenceName
           in: query
@@ -8530,7 +8530,7 @@ paths:
                     type: string
                     example: "API"
         "400":
-          description: Sequence not initialized or already running
+          description: 'Sequence not initialized or already running, or the content is not a sequence; JSON that cannot be read gives an Error starting with "Invalid sequence: " and the reason'
           content:
             application/json:
               schema:
@@ -8545,6 +8545,8 @@ paths:
                       - Sequence is not initialized
                       - Sequence is already running
                       - Sequence not found
+                      - No sequence in the JSON
+                      - The JSON is not a sequence, target or template that pins knows (is it from a plugin that is not installed?)
                   StatusCode:
                     type: integer
                     example: 400
@@ -8564,7 +8566,7 @@ paths:
       tags:
         - Sequence
       summary: Load Sequence from JSON
-      description: Loads a sequence from a JSON supplied by the client in the request body
+      description: Loads a sequence from a JSON supplied by the client in the request body. Like NINA's own load, it clears the previous sequence's global user symbols first (they are restored when the load fails), wraps a target or template into a new sequence and validates the result.
       responses:
         "200":
           description: Successful response
@@ -8589,7 +8591,7 @@ paths:
                     type: string
                     example: "API"
         "400":
-          description: Sequence not initialized or already running
+          description: 'Sequence not initialized or already running, or the content is not a sequence; JSON that cannot be read gives an Error starting with "Invalid sequence: " and the reason'
           content:
             application/json:
               schema:
@@ -8603,6 +8605,9 @@ paths:
                     enum:
                       - Sequence is not initialized
                       - Sequence is already running
+                      - No sequence in the request body
+                      - No sequence in the JSON
+                      - The JSON is not a sequence, target or template that pins knows (is it from a plugin that is not installed?)
                   StatusCode:
                     type: integer
                     example: 400

@@ -28,7 +28,7 @@ using NINA.Sequencer;
 using NINA.Sequencer.Conditions;
 using NINA.Sequencer.Container;
 using NINA.Sequencer.Interfaces.Mediator;
-using NINA.Sequencer.Mediator;
+using NINA.Sequencer.Logic;
 using NINA.Sequencer.SequenceItem;
 using NINA.Sequencer.SequenceItem.Camera;
 using NINA.Sequencer.SequenceItem.Dome;
@@ -46,6 +46,7 @@ using NINA.Sequencer.Trigger.Autofocus;
 using NINA.Sequencer.Trigger.Guider;
 using NINA.Sequencer.Trigger.MeridianFlip;
 using NINA.Sequencer.Trigger.Platesolving;
+using NINA.ViewModel.Sequencer;
 using ninaAPI.Utility;
 
 namespace ninaAPI.WebService.V2
@@ -748,18 +749,26 @@ namespace ninaAPI.WebService.V2
                 }
                 else
                 {
-                    var mediator = (SequenceMediator)sequence;
-                    object nav = mediator.GetType().GetField("sequenceNavigation", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(mediator);
-                    object factory = nav.GetType().GetField("factory", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav);
+                    string json = await HttpContext.GetRequestBodyAsStringAsync();
 
-                    var converter = new SequenceJsonConverter((ISequencerFactory)factory);
-
-                    ISequenceContainer container = converter.Deserialize(await HttpContext.GetRequestBodyAsStringAsync());
-
-                    Application.Current.Dispatcher.Invoke(() => sequence.SetAdvancedSequence((SequenceRootContainer)container));
-
-                    response.Response = "Sequence updated";
+                    if (string.IsNullOrWhiteSpace(json))
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error("No sequence in the request body", 400));
+                    }
+                    else if (ReplaceSequence(sequence, converter => converter.Deserialize(json)) is string error)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error(error, 400));
+                    }
+                    else
+                    {
+                        response.Response = "Sequence updated";
+                    }
                 }
+            }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(new Error($"Invalid sequence: {ex.Message}", 400));
             }
             catch (Exception ex)
             {
@@ -768,6 +777,154 @@ namespace ninaAPI.WebService.V2
             }
 
             HttpContext.WriteToResponse(response);
+        }
+
+        private static readonly object sequenceLoadGate = new object();
+
+        /// <summary>
+        /// Replaces the advanced sequence with the deserialized one, with the steps of NINA's own load
+        /// (Sequence2VM.LoadSequenceFromFile) that matter headless: the previous sequence's global user symbols go first,
+        /// since the new sequence registers its own while it is deserialized; a target or template is wrapped into a new
+        /// sequence; the result is validated and marked unchanged. Title and save path stay as SetAdvancedSequence leaves
+        /// them; linked templates resolve on expand or start, as after NINA's load. Unlike NINA, a load that fails gives
+        /// the current sequence its global symbols back, and JSON NINA does not know as a container is refused instead of
+        /// being loaded as an unknown placeholder. Loads run one at a time. Returns null when loaded, else the reason;
+        /// JSON errors are thrown.
+        /// </summary>
+        private static string ReplaceSequence(ISequenceMediator sequence, Func<SequenceJsonConverter, ISequenceContainer> deserialize)
+        {
+            ISequence2VM sequence2VM = sequence.GetSequenceNavigation().Sequence2VM;
+            ISequencerFactory factory = sequence2VM.SequencerFactory;
+            string error = null;
+
+            lock (sequenceLoadGate)
+            {
+                // The route checked before reading the request; a start may have come since.
+                if (sequence.IsAdvancedSequenceRunning())
+                {
+                    return "Sequence is already running";
+                }
+
+                Application.Current.Dispatcher.Invoke(() => error = ReplaceSequenceOnDispatcher(sequence, sequence2VM, factory, deserialize));
+            }
+
+            return error;
+        }
+
+        private static string ReplaceSequenceOnDispatcher(
+            ISequenceMediator sequence,
+            ISequence2VM sequence2VM,
+            ISequencerFactory factory,
+            Func<SequenceJsonConverter, ISequenceContainer> deserialize)
+        {
+            KeyValuePair<string, UserSymbol>[] previousGlobals = UserSymbol.SymbolCache.TryGetValue(UserSymbol.GlobalSymbols, out var globals)
+                ? globals.ToArray()
+                : [];
+            ISequenceRootContainer previousRoot = sequence2VM.Sequencer.MainContainer;
+            ISequenceRootContainer root;
+
+            UserSymbol.ClearUserSymbols();
+
+            try
+            {
+                ISequenceContainer container;
+
+                try
+                {
+                    container = deserialize(new SequenceJsonConverter(factory));
+                }
+                catch (InvalidCastException ex)
+                {
+                    // NINA's converter logs a top-level object it cannot read and returns an unknown item, which is no container.
+                    Logger.Error(ex);
+                    return "Invalid sequence: its top-level object could not be read (see the pins log)";
+                }
+
+                if (container is null)
+                {
+                    return "No sequence in the JSON";
+                }
+
+                // NINA's converter makes this of an object without a known container $type (also a container of a plugin
+                // that is not installed); NINA would load it as a placeholder.
+                if (container.GetType().FullName == "NINA.Sequencer.Container.UnknownSequenceContainer")
+                {
+                    return "The JSON is not a sequence, target or template that pins knows (is it from a plugin that is not installed?)";
+                }
+
+                // A start (another client, MCP) may have come while a large file was read.
+                if (sequence.IsAdvancedSequenceRunning())
+                {
+                    return "Sequence is already running";
+                }
+
+                root = container as ISequenceRootContainer ?? WrapInNewSequence(factory, container);
+                sequence.SetAdvancedSequence(root);
+            }
+            finally
+            {
+                // Only while the previous sequence is still the loaded one: not after another surface (MCP, Touch-N-Stars)
+                // loaded its own meanwhile, and also when the swap itself threw before it took place.
+                if (ReferenceEquals(sequence2VM.Sequencer.MainContainer, previousRoot))
+                {
+                    RestoreGlobalSymbols(previousGlobals);
+                }
+            }
+
+            // The sequence is replaced from here on: a failure below is logged, not answered as a failed load.
+            try
+            {
+                root.Validate();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Validating the loaded sequence failed", ex);
+            }
+
+            try
+            {
+                sequence2VM.ClearHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Clearing the loaded sequence's changed state failed", ex);
+            }
+
+            return null;
+        }
+
+        /// <summary>After a failed load: the still loaded sequence's global symbols, without those of the half-read one.</summary>
+        private static void RestoreGlobalSymbols(KeyValuePair<string, UserSymbol>[] previousGlobals)
+        {
+            UserSymbol.ClearUserSymbols();
+
+            if (previousGlobals.Length == 0)
+            {
+                return;
+            }
+
+            var globals = UserSymbol.SymbolCache.GetOrAdd(UserSymbol.GlobalSymbols, _ => new UserSymbol.SymbolDictionary());
+
+            foreach (var (identifier, symbol) in previousGlobals)
+            {
+                globals[identifier] = symbol;
+            }
+        }
+
+        /// <summary>A saved target or template in a new sequence's target area, as NINA's load does it.</summary>
+        private static SequenceRootContainer WrapInNewSequence(ISequencerFactory factory, ISequenceContainer content)
+        {
+            SequenceRootContainer root = factory.GetContainer<SequenceRootContainer>();
+            root.Name = Loc.Instance["LblAdvancedSequenceTitle"];
+            root.Add(factory.GetContainer<StartAreaContainer>());
+
+            TargetAreaContainer target = factory.GetContainer<TargetAreaContainer>();
+            target.Add(content);
+            root.Add(target);
+
+            root.Add(factory.GetContainer<EndAreaContainer>());
+
+            return root;
         }
 
         [Route(HttpVerbs.Get, "/sequence/load")]
@@ -789,12 +946,6 @@ namespace ninaAPI.WebService.V2
                 }
                 else
                 {
-                    var mediator = (SequenceMediator)sequence;
-                    object nav = mediator.GetType().GetField("sequenceNavigation", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(mediator);
-                    ISequencerFactory factory = (ISequencerFactory)nav.GetType().GetField("factory", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(nav);
-
-                    var converter = new SequenceJsonConverter(factory);
-
                     IProfile profile = AdvancedAPI.Controls.Profile.ActiveProfile;
                     string sequenceFolder = profile.SequenceSettings.DefaultSequenceFolder;
                     string sequenceFile = Path.Combine(sequenceFolder, sequenceName + ".json");
@@ -803,32 +954,20 @@ namespace ninaAPI.WebService.V2
                     {
                         response = CoreUtility.CreateErrorTable(new Error("Sequence not found", 400));
                     }
+                    else if (ReplaceSequence(sequence, converter => converter.DeserializeFromFile(sequenceFile)) is string error)
+                    {
+                        response = CoreUtility.CreateErrorTable(new Error(error, 400));
+                    }
                     else
                     {
-                        ISequenceContainer container = converter.Deserialize(File.ReadAllText(sequenceFile));
-
-                        SequenceRootContainer root;
-
-                        if (container is DeepSkyObjectContainer dso)
-                        {
-                            root = factory.GetContainer<SequenceRootContainer>();
-                            root.Name = Loc.Instance["LblAdvancedSequenceTitle"];
-                            root.Add(factory.GetContainer<StartAreaContainer>());
-                            var target = factory.GetContainer<TargetAreaContainer>();
-                            target.Add(dso);
-                            root.Add(target);
-                            root.Add(factory.GetContainer<EndAreaContainer>());
-                        }
-                        else
-                        {
-                            root = (SequenceRootContainer)container;
-                        }
-
-                        Application.Current.Dispatcher.Invoke(() => sequence.SetAdvancedSequence(root));
-
                         response.Response = "Sequence updated";
                     }
                 }
+            }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                Logger.Error(ex);
+                response = CoreUtility.CreateErrorTable(new Error($"Invalid sequence: {ex.Message}", 400));
             }
             catch (Exception ex)
             {
