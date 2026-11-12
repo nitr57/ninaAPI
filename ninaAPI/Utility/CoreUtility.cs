@@ -125,11 +125,16 @@ namespace ninaAPI.Utility
             return isPortAvailable;
         }
 
+        /// <summary>Loopback control port of the MLAstro RPA plugin, used by the MLAstro relay routes.</summary>
+        public const int MlastroControlPort = 1891;
+
         public static int GetNearestAvailablePort(int startPort)
         {
             using var watch = MyStopWatch.Measure();
             int port = startPort;
-            while (!IsPortAvailable(port))
+            // The MLAstro RPA plugin binds its loopback control port after this API has started,
+            // so that port can still look free here. Taking it would break the MLAstro relay.
+            while (!IsPortAvailable(port) || port == MlastroControlPort)
             {
                 port++;
             }
