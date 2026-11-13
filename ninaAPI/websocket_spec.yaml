@@ -169,6 +169,9 @@ channels:
                           type: string
                         FocuserPosition:
                           type: integer
+                        FocuserTemperature:
+                          type: number
+                          description: Temperature of the focuser's sensor in degrees Celsius when the image was taken, null without a focuser or without a temperature sensor
                         Id:
                           type: string
                         IsDeleted:

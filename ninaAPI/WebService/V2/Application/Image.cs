@@ -82,6 +82,9 @@ namespace ninaAPI.WebService.V2
         // indices and thumbnails are positional; clients hide flagged entries.
         public bool IsDeleted { get; set; }
         public int? FocuserPosition { get; set; }
+        // Temperature of the focuser's sensor in degrees Celsius when the image was taken. Null
+        // without a focuser or without a sensor.
+        public double? FocuserTemperature { get; set; }
         public string Filename { get => Path?.IsFile == true ? System.IO.Path.GetFileName(Path.LocalPath) : null; }
 
         private Uri Path { get; set; }
@@ -118,7 +121,20 @@ namespace ninaAPI.WebService.V2
                 Path = e.PathToImage,
                 IsBayered = e.IsBayered,
                 FocuserPosition = e.MetaData?.Focuser?.Position,
+                FocuserTemperature = FocuserTemperatureOf(e.MetaData?.Focuser?.Temperature),
             };
+        }
+
+        // A driver without a temperature sensor reports NaN, the ZWO EAF SDK -273. Neither is a
+        // temperature, and NaN would be written as the string "NaN" instead of a number.
+        private static double? FocuserTemperatureOf(double? temperature)
+        {
+            if (temperature is not double value || !double.IsFinite(value) || value <= -273)
+            {
+                return null;
+            }
+
+            return value;
         }
 
         public string GetPath()

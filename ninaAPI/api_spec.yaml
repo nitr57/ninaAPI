@@ -7493,6 +7493,9 @@ paths:
                             FocuserPosition:
                               type: integer
                               description: Focuser position when the image was taken, omitted without a focuser
+                            FocuserTemperature:
+                              type: number
+                              description: Temperature of the focuser's sensor in degrees Celsius when the image was taken, omitted without a focuser or without a temperature sensor
                             Id:
                               type: string
                               description: Identity of the entry, assigned when the image was saved. Use it to address the image delete endpoint; the positional index is not stable across a rebuilt history.
