@@ -6923,7 +6923,7 @@ paths:
           name: bayerPattern
           description:
             What bayer pattern to use for debayering, if debayer is true. If this is not specified, the api will try to use the bayer pattern that is configured in the profile as its first option,
-            if that is set to Auto, the api uses the image's own bayer pattern with its bayer offsets (BAYERPAT, XBAYROFF and YBAYROFF of the saved file, as NINA recorded them at the capture), else the pattern and offsets reported by the camera if it is connected, as NINA's own preview does. The fallback value is Monochrome.
+            if that is set to Auto, the api uses the image's own bayer pattern with its bayer offsets (for a FITS or XISF file its BAYERPAT, XBAYROFF and YBAYROFF, as NINA recorded them at the capture; for a camera raw the converter's pattern), else the pattern and offsets reported by the camera if it is connected, as NINA's own preview does. The fallback value is Monochrome.
             A profile pattern of None counts as Monochrome. Only the 2x2 bayer patterns (RGGB, RGBG, GRGB, GRBG, GBGR, GBRG, BGRG, BGGR) are debayered;
             with any other value the image is returned as it is. An unknown value answers 400.
           required: false

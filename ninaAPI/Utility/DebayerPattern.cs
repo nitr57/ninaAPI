@@ -29,8 +29,9 @@ namespace ninaAPI.Utility
     {
         /// <summary>
         /// The pattern to debayer an image with, as NINA's own preview picks it (ImageControlVM.PrepareImage): a pattern set
-        /// in the profile as it is; with Auto the image's own pattern with its bayer offsets as NINA recorded them at the capture
-        /// (the driver's when the profile was Auto then; for a saved file its BAYERPAT, XBAYROFF and YBAYROFF), else the connected camera's sensor type with its offsets, the
+        /// in the profile as it is; with Auto the image's own pattern with its bayer offsets as NINA recorded them at the
+        /// capture (the driver's when the profile was Auto then; for a saved FITS or XISF file its BAYERPAT, XBAYROFF and
+        /// YBAYROFF; for a camera raw the converter's pattern), else the connected camera's sensor type with its offsets, the
         /// offsets applied as NINA does (BayerPatternUtility.ApplyOffsets). None treats an OSC camera as monochrome (mono bin
         /// modes), where NINA would fail; so does Auto without a pattern in the image and without a connected camera. Only
         /// the eight 2x2 patterns count as the image's own: a CMYG or LRGB image, which Debayer can't take, falls through
