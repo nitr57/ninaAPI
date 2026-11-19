@@ -21,9 +21,10 @@ namespace ninaAPI.WebService.V2
         {
             LogProcessor = new NINALogMessageProcessor();
             LogWatcher = new NINALogWatcher(LogProcessor);
-            LogWatcher.Start();
 
+            // before the start: the first lines are handed over at once
             LogProcessor.NINALogEventSaved += LogEvent;
+            LogWatcher.Start();
         }
 
         public void StopWatchers()
