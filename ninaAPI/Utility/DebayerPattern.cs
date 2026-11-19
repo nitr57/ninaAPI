@@ -14,6 +14,8 @@
 
 using NINA.Core.Enum;
 using NINA.Equipment.Equipment.MyCamera;
+using NINA.Image.ImageAnalysis;
+using NINA.Image.ImageData;
 using System;
 
 namespace ninaAPI.Utility
@@ -26,17 +28,38 @@ namespace ninaAPI.Utility
     public static class DebayerPattern
     {
         /// <summary>
-        /// The profile's bayer pattern as a sensor type: None treats an OSC camera as monochrome (mono bin modes, as NINA
-        /// does), Auto takes the driver's sensor type (monochrome without a connected camera), any other the pattern itself.
+        /// The pattern to debayer an image with, as NINA's own preview picks it (ImageControlVM.PrepareImage): a pattern set
+        /// in the profile as it is; with Auto the image's own pattern with its bayer offsets (the driver's at the capture, or
+        /// BAYERPAT, XBAYROFF and YBAYROFF of a saved file), else the connected camera's sensor type with its offsets, the
+        /// offsets applied as NINA does (BayerPatternUtility.ApplyOffsets). None treats an OSC camera as monochrome (mono bin
+        /// modes), where NINA would fail; so does Auto without a pattern in the image and without a connected camera. Only
+        /// the eight 2x2 patterns count as the image's own: a CMYG or LRGB image, which Debayer can't take, falls through
+        /// to the camera.
         /// </summary>
-        public static SensorType SensorTypeFor(BayerPatternEnum pattern, CameraInfo camera)
+        public static SensorType For(BayerPatternEnum profilePattern, ImageMetaData metaData, CameraInfo camera)
         {
-            return pattern switch
+            if (profilePattern == BayerPatternEnum.None)
             {
-                BayerPatternEnum.None => SensorType.Monochrome,
-                BayerPatternEnum.Auto => camera?.Connected == true ? camera.SensorType : SensorType.Monochrome,
-                _ => (SensorType)pattern,
-            };
+                return SensorType.Monochrome;
+            }
+
+            if (profilePattern != BayerPatternEnum.Auto)
+            {
+                return (SensorType)profilePattern;
+            }
+
+            var imageCamera = metaData?.Camera;
+            if (imageCamera != null && CanDebayer(imageCamera.SensorType))
+            {
+                return BayerPatternUtility.ApplyOffsets(imageCamera.SensorType, imageCamera.BayerOffsetX, imageCamera.BayerOffsetY);
+            }
+
+            if (camera?.Connected == true)
+            {
+                return BayerPatternUtility.ApplyOffsets(camera.SensorType, camera.BayerOffsetX, camera.BayerOffsetY);
+            }
+
+            return SensorType.Monochrome;
         }
 
         /// <summary>Whether Debayer can use the sensor type; it throws for monochrome, color, CMYG and LRGB sensors.</summary>

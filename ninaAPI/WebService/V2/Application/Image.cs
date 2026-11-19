@@ -326,11 +326,9 @@ namespace ninaAPI.WebService.V2
             {
                 unlinked = profile.ImageSettings.UnlinkedStretch;
             }
-            if (HttpContext.IsParameterOmitted(nameof(bayerPattern)) || autoPrepare)
-            {
-                sensor = DebayerPattern.SensorTypeFor(profile.CameraSettings.BayerPattern, AdvancedAPI.Controls.Camera.GetInfo());
-            }
-            else if (!DebayerPattern.TryParse(bayerPattern, out sensor))
+            // Without a pattern in the request it is picked once the image is there: with Auto it is the image's own.
+            bool patternFromProfile = HttpContext.IsParameterOmitted(nameof(bayerPattern)) || autoPrepare;
+            if (!patternFromProfile && !DebayerPattern.TryParse(bayerPattern, out sensor))
             {
                 response = CoreUtility.CreateErrorTable(new Error("Invalid bayer pattern", 400));
                 HttpContext.WriteToResponse(response);
@@ -362,6 +360,11 @@ namespace ninaAPI.WebService.V2
                     response = CoreUtility.CreateErrorTable(new Error("No image", 404));
                     HttpContext.WriteToResponse(response);
                     return;
+                }
+
+                if (patternFromProfile)
+                {
+                    sensor = DebayerPattern.For(profile.CameraSettings.BayerPattern, renderedImage.RawImageData.MetaData, AdvancedAPI.Controls.Camera.GetInfo());
                 }
 
                 // NINA already debayered the prepared image when the profile's DebayerImage is on; debayering it again garbles it
@@ -672,11 +675,9 @@ namespace ninaAPI.WebService.V2
             {
                 unlinked = profile.ImageSettings.UnlinkedStretch;
             }
-            if (HttpContext.IsParameterOmitted(nameof(bayerPattern)) || autoPrepare)
-            {
-                sensor = DebayerPattern.SensorTypeFor(profile.CameraSettings.BayerPattern, AdvancedAPI.Controls.Camera.GetInfo());
-            }
-            else if (!DebayerPattern.TryParse(bayerPattern, out sensor))
+            // Without a pattern in the request it is picked once the image is there: with Auto it is the image's own.
+            bool patternFromProfile = HttpContext.IsParameterOmitted(nameof(bayerPattern)) || autoPrepare;
+            if (!patternFromProfile && !DebayerPattern.TryParse(bayerPattern, out sensor))
             {
                 response = CoreUtility.CreateErrorTable(new Error("Invalid bayer pattern", 400));
                 HttpContext.WriteToResponse(response);
@@ -730,6 +731,11 @@ namespace ninaAPI.WebService.V2
 
                     if (HttpContext.IsParameterOmitted(nameof(raw_fits)))
                     {
+                        if (patternFromProfile)
+                        {
+                            sensor = DebayerPattern.For(profile.CameraSettings.BayerPattern, imageData.MetaData, AdvancedAPI.Controls.Camera.GetInfo());
+                        }
+
                         IRenderedImage renderedImage = imageData.RenderImage();
 
                         if (DebayerPattern.CanDebayer(sensor)

@@ -191,7 +191,7 @@ namespace ninaAPI.WebService.V2
             IProfile profile = AdvancedAPI.Controls.Profile.ActiveProfile;
             IRenderedImage image = imageData.RenderImage();
 
-            SensorType sensor = DebayerPattern.SensorTypeFor(profile.GuideCameraSettings.BayerPattern, info);
+            SensorType sensor = DebayerPattern.For(profile.GuideCameraSettings.BayerPattern, imageData.MetaData, info);
             if (image.RawImageData.Properties.IsBayered && DebayerPattern.CanDebayer(sensor))
             {
                 image = image.Debayer(saveColorChannels: true, saveLumChannel: true, bayerPattern: sensor);
