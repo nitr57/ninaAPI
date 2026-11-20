@@ -220,6 +220,13 @@ namespace ninaAPI
             {
                 long end = reader.Length;
 
+                // A file shorter than the read position was truncated: read it again from its start.
+                if (end < reader.Position)
+                {
+                    reader.Position = 0;
+                    partialLine = Array.Empty<byte>();
+                }
+
                 while (reader.Position < end && !token.IsCancellationRequested)
                 {
                     int read = reader.Read(chunk, 0, (int)Math.Min(chunk.Length, end - reader.Position));
