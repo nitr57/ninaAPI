@@ -55,7 +55,9 @@ namespace ninaAPI.WebService.V2
 
     public partial class ControllerV2
     {
-        private static CancellationTokenSource SwitchToken;
+        // One per switch index: a newer value for a switch ends the wait for its older one, other switches keep theirs
+        private static readonly object SwitchTokensLock = new();
+        private static readonly Dictionary<short, CancellationTokenSource> SwitchTokens = new();
 
         [Route(HttpVerbs.Get, "/equipment/switch/info")]
         public void SwitchInfo()
@@ -99,11 +101,21 @@ namespace ninaAPI.WebService.V2
                 }
                 else
                 {
-                    SwitchToken?.Cancel();
-                    SwitchToken = new CancellationTokenSource();
+                    CancellationTokenSource cts = new();
+                    CancellationTokenSource previous;
+
+                    lock (SwitchTokensLock)
+                    {
+                        SwitchTokens.Remove(index, out previous);
+                        SwitchTokens[index] = cts;
+                    }
+
+                    // Outside the lock: the cancelled request may finish on this thread, including its response write
+                    previous?.Cancel();
+
                     try
                     {
-                        await sw.SetSwitchValue(index, value, AdvancedAPI.Controls.StatusMediator.GetStatus(), SwitchToken.Token);
+                        await sw.SetSwitchValue(index, value, AdvancedAPI.Controls.StatusMediator.GetStatus(), cts.Token);
                         response.Response = "Switch value updated";
                     }
                     catch (OperationCanceledException)
